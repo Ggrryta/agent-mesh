@@ -1,0 +1,35 @@
+# golangci-lint config
+# 仓库实际开发用 Go 1.25,但 CI 里的 golangci-lint v1.64.x 只支持到 1.24,
+# 这里覆盖为 1.24,lint 按 1.24 规则扫,不影响 go build / go test
+run:
+  go: '1.24'
+  timeout: 5m
+  tests: true
+
+# 先启用一个温和的基础集,让 CI 能跑通
+# 后续增强规则按需开启
+linters:
+  disable-all: true
+  enable:
+    - govet       # 官方 vet,低假阳性
+    - ineffassign # 未使用赋值
+    - misspell    # 拼写错误
+    - unused      # 未使用代码
+    - staticcheck # 一些通用 bug
+
+# 关掉 vendor/generated 代码
+issues:
+  exclude-dirs:
+    - vendor
+    - frontend
+  exclude-rules:
+    # 测试文件里允许一些松散风格
+    - path: _test\.go
+      linters:
+        - unused
+    # 自动生成的文件跳过
+    - path: \.pb\.go$
+      linters:
+        - all
+  max-issues-per-linter: 0
+  max-same-issues: 0
