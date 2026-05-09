@@ -1,34 +1,44 @@
 version: 2
 updates:
-  # Go modules
+  # Go modules — 一次最多 3 个开着,避免洪水
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "chore(deps)"
+    # 只接受 patch 和 minor 升级(避免自动 major 破坏性变更)
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
-  # GitHub Actions
+  # GitHub Actions — 冷更新无害,月度即可
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "chore(ci)"
 
-  # Docker base image
+  # Docker base image — 同上,但跳过 major
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 1
     commit-message:
       prefix: "chore(docker)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
-  # Python (skill)
+  # Python (skill) — 冷更新,月度即可
   - package-ecosystem: "pip"
     directory: "/agent-gateway-skill"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "chore(skill-deps)"
