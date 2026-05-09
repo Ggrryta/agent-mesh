@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import shutil
-import subprocess
 import sys
 
 from _common import HOME_CONFIG_DIR, SKILL_ROOT, ok
@@ -37,12 +36,12 @@ def main():
     print(f"\n2. 清理数据目录 {HOME_CONFIG_DIR} ...")
     if HOME_CONFIG_DIR.exists():
         shutil.rmtree(HOME_CONFIG_DIR, ignore_errors=True)
-        print(f"  ✓ 已删除")
+        print("  ✓ 已删除")
     else:
-        print(f"  - 不存在,跳过")
+        print("  - 不存在,跳过")
 
     ok("本地卸载完成")
-    print(f"\n提示:如需彻底删除 skill,请运行:")
+    print("\n提示:如需彻底删除 skill,请运行:")
     print(f"  rm -rf {SKILL_ROOT}")
     return 0
 
