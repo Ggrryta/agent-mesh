@@ -17,7 +17,8 @@ def main():
     try:
         r = gateway_call("GET", "/friendships", agent_id=me)
     except GatewayError as e:
-        print(f"❌ 查询失败: {e}", file=sys.stderr); return 1
+        print(f"❌ 查询失败: {e}", file=sys.stderr)
+        return 1
     items = r.get("data") or []
     if not items:
         print(f"({me} 还没有好友)")

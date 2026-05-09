@@ -34,7 +34,6 @@ import urllib.error
 import urllib.request
 
 from _common import (
-    HOME_CONFIG_DIR,
     SKILL_ROOT,
     die,
     info,

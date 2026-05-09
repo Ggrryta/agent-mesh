@@ -30,7 +30,7 @@ import sys
 import time
 from pathlib import Path
 
-from _common import HOME_CONFIG_DIR, PID_FILE, DaemonError, http_call
+from _common import HOME_CONFIG_DIR, PID_FILE, http_call
 
 
 # ═══ 进程安全校验 ═══════════════════════════════════

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import pathlib
 import subprocess
 import sys
 import time
@@ -215,4 +214,4 @@ if __name__ == "__main__":
         print(f"✅ daemon {r['status']} (pid={r['pid']}, url={r['url']})")
         if r.get("update_available"):
             print(f"🔔 有 skill 新版可升级: {r['update_available']}")
-            print(f"   执行 '升级 agent-gateway' 或 python3 scripts/self_update.py")
+            print("   执行 '升级 agent-gateway' 或 python3 scripts/self_update.py")
