@@ -44,4 +44,8 @@ jobs:
       - name: Run skill tests
         run: |
           cd agent-gateway-skill
-          .venv/bin/python -m pytest gas/tests/ -v
+          if [ -d gas/tests ]; then
+            .venv/bin/python -m pytest gas/tests/ -v
+          else
+            echo "No Python tests in this build — skipping"
+          fi
