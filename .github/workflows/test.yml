@@ -1,0 +1,47 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-test:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test -race -count=1 ./...
+
+  python-test:
+    name: Python skill tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install skill deps
+        run: |
+          cd agent-gateway-skill
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install aiohttp pyyaml pytest pytest-asyncio
+
+      - name: Run skill tests
+        run: |
+          cd agent-gateway-skill
+          .venv/bin/python -m pytest gas/tests/ -v

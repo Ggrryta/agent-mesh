@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>权限申请 — Agent Gateway</title>
+  <script src="common.js"></script>
+  <style id="common-style"></style>
+  <style>
+    .status-pending  { background:#fff3cd;color:#856404; }
+    .status-approved { background:#d4edda;color:#155724; }
+    .status-rejected { background:#f8d7da;color:#721c24; }
+    .review-btns { display:flex;gap:6px; }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>📋 权限申请管理</h1>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('inbox')">📥 收件箱（Provider 审批）</div>
+    <div class="tab" onclick="switchTab('outbox')">📤 发件箱（我的申请）</div>
+  </div>
+
+  <!-- Inbox -->
+  <div class="tab-panel active" id="panel-inbox">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <select id="inbox-status-filter" onchange="loadInbox()" style="max-width:160px">
+          <option value="">全部状态</option>
+          <option value="pending" selected>待审批</option>
+          <option value="approved">已同意</option>
+          <option value="rejected">已拒绝</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="loadInbox()">刷新</button>
+        <span style="font-size:13px;color:#888">作为 Skill Owner，审批他人的调用申请</span>
+      </div>
+      <div id="inbox-table"><div class="loading">加载中...</div></div>
+    </div>
+  </div>
+
+  <!-- Outbox -->
+  <div class="tab-panel" id="panel-outbox">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <select id="outbox-status-filter" onchange="loadOutbox()" style="max-width:160px">
+          <option value="">全部状态</option>
+          <option value="pending" selected>待审批</option>
+          <option value="approved">已同意</option>
+          <option value="rejected">已拒绝</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="loadOutbox()">刷新</button>
+        <span style="font-size:13px;color:#888">我提交的权限申请</span>
+      </div>
+      <div id="outbox-table"><div class="loading">加载中...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS
+  document.getElementById('nav-placeholder').innerHTML = renderNav('apply.html')
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['inbox','outbox'][i] === name))
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
+    document.getElementById('panel-' + name).classList.add('active')
+    if (name === 'inbox') loadInbox()
+    else loadOutbox()
+  }
+
+  function statusBadge(s) {
+    const map = { 1: ['pending','待审批'], 2: ['approved','已同意'], 3: ['rejected','已拒绝'] }
+    const [cls, label] = map[s] || ['gray', s]
+    return `<span class="badge status-${cls}">${label}</span>`
+  }
+
+  function fmtTime(t) {
+    if (!t) return '—'
+    return new Date(t).toLocaleString('zh-CN', { hour12: false })
+  }
+
+  async function loadInbox() {
+    const status = document.getElementById('inbox-status-filter').value
+    const qs = status ? '?status=' + status : ''
+    const el = document.getElementById('inbox-table')
+    el.innerHTML = '<div class="loading">加载中...</div>'
+    const { ok, data } = await apiFetch('/apply/inbox' + qs)
+    if (!ok || data.code !== 0) {
+      el.innerHTML = `<div class="alert alert-error">${data.message || '加载失败，请先登录'}</div>`
+      return
+    }
+    const items = data.data.items || []
+    if (!items.length) { el.innerHTML = '<div class="empty">暂无申请</div>'; return }
+    const rows = items.map(a => `
+      <tr>
+        <td>${a.id}</td>
+        <td style="font-family:monospace;font-size:12px">${a.skill_id}</td>
+        <td>${a.applicant_app_id}</td>
+        <td>${a.reason || '—'}</td>
+        <td>${statusBadge(a.status)}</td>
+        <td style="font-size:12px">${fmtTime(a.created_at)}</td>
+        <td>
+          ${a.status === 1 ? `
+            <div class="review-btns">
+              <button class="btn btn-success btn-sm" onclick="doApprove(${a.id})">同意</button>
+              <button class="btn btn-danger btn-sm" onclick="doReject(${a.id})">拒绝</button>
+            </div>` : '—'}
+        </td>
+      </tr>`).join('')
+    el.innerHTML = `
+      <table>
+        <thead><tr><th>ID</th><th>Skill ID</th><th>申请方</th><th>原因</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`
+  }
+
+  async function loadOutbox() {
+    const status = document.getElementById('outbox-status-filter').value
+    const qs = status ? '?status=' + status : ''
+    const el = document.getElementById('outbox-table')
+    el.innerHTML = '<div class="loading">加载中...</div>'
+    const { ok, data } = await apiFetch('/apply/outbox' + qs)
+    if (!ok || data.code !== 0) {
+      el.innerHTML = `<div class="alert alert-error">${data.message || '加载失败，请先登录'}</div>`
+      return
+    }
+    const items = data.data.items || []
+    if (!items.length) { el.innerHTML = '<div class="empty">暂无申请记录</div>'; return }
+    const rows = items.map(a => `
+      <tr>
+        <td>${a.id}</td>
+        <td style="font-family:monospace;font-size:12px">${a.skill_id}</td>
+        <td>${a.owner_app_id}</td>
+        <td>${a.reason || '—'}</td>
+        <td>${statusBadge(a.status)}</td>
+        <td style="font-size:12px">${fmtTime(a.created_at)}</td>
+        <td style="font-size:12px">${fmtTime(a.reviewed_at)}</td>
+      </tr>`).join('')
+    el.innerHTML = `
+      <table>
+        <thead><tr><th>ID</th><th>Skill ID</th><th>Owner</th><th>原因</th><th>状态</th><th>申请时间</th><th>审批时间</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`
+  }
+
+  async function doApprove(id) {
+    if (!confirm('确认同意申请 #' + id + '？')) return
+    const { ok, data } = await apiFetch('/apply/' + id + '/approve', { method: 'POST' })
+    if (ok && data.code === 0) { toast('已同意', 'success'); loadInbox() }
+    else toast(data.message || '操作失败', 'error')
+  }
+
+  async function doReject(id) {
+    if (!confirm('确认拒绝申请 #' + id + '？')) return
+    const { ok, data } = await apiFetch('/apply/' + id + '/reject', { method: 'POST' })
+    if (ok && data.code === 0) { toast('已拒绝', 'success'); loadInbox() }
+    else toast(data.message || '操作失败', 'error')
+  }
+
+  loadInbox()
+</script>
+</body>
+</html>

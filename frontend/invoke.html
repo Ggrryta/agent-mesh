@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>调用测试台 — Agent Gateway</title>
+  <script src="common.js"></script>
+  <style id="common-style"></style>
+  <style>
+    .split { display:grid; grid-template-columns:300px 1fr; gap:20px; align-items:start; }
+    @media(max-width:800px){ .split { grid-template-columns:1fr; } }
+    .skill-list { max-height:70vh; overflow-y:auto; }
+    .skill-item { padding:10px 12px; border-radius:4px; cursor:pointer; border:1px solid #e0e0e0; margin-bottom:6px; background:white; }
+    .skill-item:hover { border-color:#1a73e8; background:#e8f0fe; }
+    .skill-item.selected { border-color:#1a73e8; background:#e8f0fe; }
+    .skill-item .sname { font-weight:500; font-size:14px; }
+    .skill-item .sid { font-size:11px; color:#888; font-family:monospace; margin-top:2px; }
+    .mode-btns { display:flex; gap:8px; margin-bottom:12px; }
+    .mode-btn { padding:6px 14px; border-radius:4px; border:1px solid #ddd; cursor:pointer; font-size:13px; background:white; }
+    .mode-btn.active { background:#1a73e8; color:white; border-color:#1a73e8; }
+    .result-area { min-height:200px; }
+    .task-poll { background:#fff3cd; padding:12px; border-radius:4px; font-size:13px; margin-bottom:10px; }
+    .stream-line { border-bottom:1px solid #3d5166; padding:3px 0; }
+    .info-row { display:flex; gap:8px; align-items:center; font-size:13px; color:#666; margin-bottom:8px; flex-wrap:wrap; }
+    .info-row .lbl { font-weight:500; color:#555; }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>🚀 调用测试台</h1>
+
+  <div class="split">
+    <!-- 左：Skill 列表 -->
+    <div>
+      <div class="card" style="padding:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h3 style="margin:0">Skill 列表</h3>
+          <button class="btn btn-outline btn-sm" onclick="loadSkills()">刷新</button>
+        </div>
+        <input id="skill-search" placeholder="搜索..." oninput="filterSkillList()" style="margin-bottom:10px" />
+        <div class="skill-list" id="skill-list">
+          <div class="loading">加载中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右：调用面板 -->
+    <div>
+      <div class="card" id="invoke-panel">
+        <div id="no-select" style="color:#aaa;text-align:center;padding:40px">← 从左侧选择一个 Skill</div>
+        <div id="invoke-content" style="display:none">
+          <h3 id="inv-name" style="margin-bottom:4px"></h3>
+          <div class="info-row">
+            <span class="lbl">Skill ID：</span><span id="inv-id" style="font-family:monospace;font-size:12px"></span>
+          </div>
+          <div class="info-row">
+            <span class="lbl">执行类型：</span><span id="inv-exec"></span>
+            <span class="lbl" style="margin-left:12px">调用类型：</span><span id="inv-call"></span>
+            <span class="lbl" style="margin-left:12px">可见性：</span><span id="inv-vis"></span>
+          </div>
+          <div class="info-row">
+            <span class="lbl">Endpoint：</span><span id="inv-endpoint" style="font-family:monospace;font-size:12px;color:#1a73e8"></span>
+          </div>
+
+          <h3>Input Schema</h3>
+          <div class="code" id="inv-schema" style="margin-bottom:12px;max-height:120px;overflow-y:auto"></div>
+
+          <h3>调用模式</h3>
+          <div class="mode-btns">
+            <button class="mode-btn active" onclick="setMode('sync')">同步</button>
+            <button class="mode-btn" onclick="setMode('async')">异步</button>
+            <button class="mode-btn" onclick="setMode('stream')">流式 SSE</button>
+          </div>
+
+          <h3>Input（JSON）</h3>
+          <textarea id="inv-input" rows="6" placeholder='{"key": "value"}'></textarea>
+
+          <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+            <button class="btn btn-primary" onclick="doInvoke()">▶ 发起调用</button>
+            <button class="btn btn-outline btn-sm" onclick="clearResult()">清空结果</button>
+            <span id="inv-status" style="font-size:13px;color:#888"></span>
+          </div>
+
+          <h3 style="margin-top:16px">结果</h3>
+          <div class="result-area">
+            <div id="task-info" class="task-poll" style="display:none">
+              <strong>异步任务</strong> Task ID：<span id="task-id-display" style="font-family:monospace"></span>
+              <button class="btn btn-outline btn-sm" style="margin-left:10px" onclick="pollTask()">查询状态</button>
+            </div>
+            <div class="code" id="result-box" style="min-height:120px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS
+  document.getElementById('nav-placeholder').innerHTML = renderNav('invoke.html')
+
+  let allSkills = []
+  let selectedSkill = null
+  let invokeMode = 'sync'
+  let streamSource = null
+
+  async function loadSkills() {
+    document.getElementById('skill-list').innerHTML = '<div class="loading">加载中...</div>'
+    const { ok, data } = await apiFetch('/skills')
+    if (!ok || data.code !== 0) {
+      document.getElementById('skill-list').innerHTML = '<div class="alert alert-error">加载失败</div>'
+      return
+    }
+    allSkills = data.data.items || []
+    renderSkillList(allSkills)
+  }
+
+  function filterSkillList() {
+    const q = document.getElementById('skill-search').value.toLowerCase()
+    renderSkillList(allSkills.filter(s => !q || s.skill_id.toLowerCase().includes(q) || (s.name || '').toLowerCase().includes(q)))
+  }
+
+  function renderSkillList(skills) {
+    if (!skills.length) { document.getElementById('skill-list').innerHTML = '<div class="empty">无结果</div>'; return }
+    document.getElementById('skill-list').innerHTML = skills.map(s =>
+      `<div class="skill-item ${selectedSkill?.skill_id === s.skill_id ? 'selected' : ''}" onclick="selectSkill('${s.skill_id}')">
+        <div class="sname">${s.name || s.skill_id}</div>
+        <div class="sid">${s.skill_id}</div>
+        <div style="margin-top:4px">
+          <span class="badge ${s.visibility === 0 ? 'badge-green' : 'badge-yellow'}" style="font-size:11px">${s.visibility === 0 ? '公开' : '私有'}</span>
+          <span class="badge badge-gray" style="font-size:11px;margin-left:4px">${{1:'HTTP',2:'gRPC',3:'Local',4:'Builtin'}[s.execution_type]||s.execution_type}</span>
+        </div>
+      </div>`
+    ).join('')
+  }
+
+  function selectSkill(skillID) {
+    selectedSkill = allSkills.find(s => s.skill_id === skillID)
+    if (!selectedSkill) return
+    renderSkillList(allSkills.filter(s => {
+      const q = document.getElementById('skill-search').value.toLowerCase()
+      return !q || s.skill_id.toLowerCase().includes(q) || (s.name || '').toLowerCase().includes(q)
+    }))
+    document.getElementById('no-select').style.display = 'none'
+    document.getElementById('invoke-content').style.display = ''
+    const execMap = {1:'HTTP',2:'gRPC',3:'Local',4:'Builtin'}
+    const callMap = {1:'Sync',2:'Stream',3:'Async'}
+    document.getElementById('inv-name').textContent = selectedSkill.name || selectedSkill.skill_id
+    document.getElementById('inv-id').textContent = selectedSkill.skill_id
+    document.getElementById('inv-exec').textContent = execMap[selectedSkill.execution_type] || selectedSkill.execution_type
+    document.getElementById('inv-call').textContent = callMap[selectedSkill.call_type] || selectedSkill.call_type
+    document.getElementById('inv-vis').textContent = selectedSkill.visibility === 0 ? '公开' : '私有'
+    document.getElementById('inv-endpoint').textContent = selectedSkill.endpoint || '—'
+    document.getElementById('inv-schema').innerHTML = highlight(selectedSkill.input_schema || {})
+    // 根据 call_type 预设模式
+    if (selectedSkill.call_type === 2) setMode('stream')
+    else if (selectedSkill.call_type === 3) setMode('async')
+    else setMode('sync')
+    clearResult()
+  }
+
+  function setMode(m) {
+    invokeMode = m
+    document.querySelectorAll('.mode-btn').forEach((b, i) => b.classList.toggle('active', ['sync','async','stream'][i] === m))
+  }
+
+  function clearResult() {
+    document.getElementById('result-box').innerHTML = ''
+    document.getElementById('task-info').style.display = 'none'
+    document.getElementById('inv-status').textContent = ''
+    if (streamSource) { streamSource.close(); streamSource = null }
+  }
+
+  async function doInvoke() {
+    if (!selectedSkill) { toast('请先选择 Skill', 'error'); return }
+    let input
+    try { input = JSON.parse(document.getElementById('inv-input').value || '{}') }
+    catch { toast('Input 不是合法 JSON', 'error'); return }
+
+    clearResult()
+    const skillID = selectedSkill.skill_id
+    document.getElementById('inv-status').textContent = '调用中...'
+
+    if (invokeMode === 'sync') {
+      const { ok, data } = await apiFetch('/gateway/invoke/skill/' + skillID, {
+        method: 'POST', body: JSON.stringify({ input })
+      })
+      document.getElementById('inv-status').textContent = ok ? '✅ 成功' : '❌ 失败'
+      document.getElementById('result-box').innerHTML = highlight(data)
+    } else if (invokeMode === 'async') {
+      const { ok, data } = await apiFetch('/gateway/invoke/skill/' + skillID + '?async=true', {
+        method: 'POST', body: JSON.stringify({ input })
+      })
+      if (ok && data.code === 0) {
+        const taskID = data.data?.task_id
+        document.getElementById('inv-status').textContent = '✅ 任务已提交'
+        document.getElementById('task-info').style.display = ''
+        document.getElementById('task-id-display').textContent = taskID
+        document.getElementById('result-box').innerHTML = highlight(data)
+      } else {
+        document.getElementById('inv-status').textContent = '❌ 失败'
+        document.getElementById('result-box').innerHTML = highlight(data)
+      }
+    } else {
+      // 流式
+      document.getElementById('inv-status').textContent = '🔄 流式接收中...'
+      document.getElementById('result-box').innerHTML = ''
+      const token = getToken()
+      const url = API_BASE + '/gateway/invoke/skill/' + skillID + '?stream=true'
+      // 用 fetch 读取 SSE 流
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ input })
+        })
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        const box = document.getElementById('result-box')
+        let buf = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop()
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              const d = line.slice(5).trim()
+              if (d === '[DONE]') { document.getElementById('inv-status').textContent = '✅ 流式完成'; break }
+              const span = document.createElement('div')
+              span.className = 'stream-line'
+              span.textContent = d
+              box.appendChild(span)
+              box.scrollTop = box.scrollHeight
+            }
+          }
+        }
+        document.getElementById('inv-status').textContent = '✅ 流式完成'
+      } catch (e) {
+        document.getElementById('inv-status').textContent = '❌ 流式失败'
+        document.getElementById('result-box').textContent = e.message
+      }
+    }
+  }
+
+  async function pollTask() {
+    const taskID = document.getElementById('task-id-display').textContent
+    if (!taskID) return
+    const { ok, data } = await apiFetch('/gateway/task/' + taskID)
+    if (!ok) { toast(data.message || '查询失败', 'error'); return }
+    document.getElementById('result-box').innerHTML = highlight(data.data || data)
+    const status = data.data?.status
+    if (status === 'completed' || status === 'failed') {
+      document.getElementById('inv-status').textContent = (status === 'completed' ? '✅' : '❌') + ' 任务' + status
+    }
+  }
+
+  loadSkills()
+</script>
+</body>
+</html>

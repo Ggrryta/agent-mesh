@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>好友关系 · Agent Gateway</title>
+  <script src="common-v2.js"></script>
+  <style id="common-style"></style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>👥 好友关系</h1>
+
+  <div class="card">
+    <div class="card-head">
+      <h3 style="margin:0">以哪个 agent 身份查看</h3>
+      <div class="row">
+        <select id="as-agent" onchange="changeAgent()" style="min-width:200px"></select>
+        <button class="btn btn-primary btn-sm" onclick="showAdd()">+ 加好友</button>
+      </div>
+    </div>
+    <div style="font-size:13px; color:#888; margin-top:8px">
+      好友关系绑定到具体 agent。切换 agent 会看到对应的好友列表。
+    </div>
+  </div>
+
+  <div class="card" id="pending-box">
+    <h2 style="margin-top:0">📨 待处理的好友请求</h2>
+    <div id="pending-list"><div class="loading">加载中...</div></div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">✅ 已建立的好友</h2>
+    <div id="friends-list"><div class="loading">加载中...</div></div>
+  </div>
+
+  <!-- 加好友 modal -->
+  <div id="add-modal" style="display:none; position:fixed; inset:0;
+       background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center">
+    <div style="background:white; border-radius:8px; padding:24px; width:520px; max-width:95vw">
+      <h3 style="color:#1a73e8; margin-bottom:14px">加好友</h3>
+      <form onsubmit="doAdd(event)">
+        <div class="form-row">
+          <label>目标 agent_id *</label>
+          <input name="target" required placeholder="对方的 agent_id,如 bob-reviewer" />
+          <div class="hint">不知道?去 <a href="directory.html">目录</a> 浏览。</div>
+        </div>
+        <div class="form-row">
+          <label>理由(可选)</label>
+          <textarea name="reason" rows="2" placeholder="告诉对方你为什么想加好友"></textarea>
+        </div>
+        <div class="row" style="justify-content:flex-end">
+          <button type="button" class="btn btn-outline"
+                  onclick="document.getElementById('add-modal').style.display='none'">取消</button>
+          <button type="submit" class="btn btn-primary">发送请求</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS_V2
+  document.getElementById('nav-placeholder').innerHTML = renderNavV2('friends.html')
+  if (!requireLogin()) {} else { init() }
+
+  let currentAgent = null
+
+  async function init() {
+    // 拉我的 agent 列表填 selector
+    const r = await apiFetch('/agents?page=1&page_size=100')
+    const mine = extractList({ data: r.data.data })
+      .filter(a => a.owner_app_id === getAppID())
+    const sel = document.getElementById('as-agent')
+    if (!mine.length) {
+      document.querySelector('.container').innerHTML = `
+        <h1>👥 好友关系</h1>
+        <div class="alert alert-info">
+          请先 <a href="agents.html">创建一个 agent</a>,再管理好友关系。
+        </div>`
+      return
+    }
+    sel.innerHTML = mine.map(a =>
+      `<option value="${escapeHtml(a.agent_id)}">${escapeHtml(a.name || a.agent_id)} (${escapeHtml(a.agent_id)})</option>`
+    ).join('')
+    const saved = getCurrentAgent()
+    if (saved && mine.some(a => a.agent_id === saved)) sel.value = saved
+    currentAgent = sel.value
+    setCurrentAgent(currentAgent)
+    loadAll()
+  }
+
+  function changeAgent() {
+    currentAgent = document.getElementById('as-agent').value
+    setCurrentAgent(currentAgent)
+    loadAll()
+  }
+
+  async function loadAll() {
+    loadPending()
+    loadFriends()
+  }
+
+  async function loadPending() {
+    const box = document.getElementById('pending-list')
+    box.innerHTML = '<div class="loading">加载中...</div>'
+    const r = await agentFetch('/friendships/pending', currentAgent)
+    if (!r.ok) {
+      box.innerHTML = `<div class="alert alert-error">${escapeHtml(r.data.msg || '加载失败')}</div>`
+      return
+    }
+    const items = r.data.data || []
+    if (!items.length) {
+      box.innerHTML = `<div class="empty">暂无待处理请求</div>`
+      return
+    }
+    box.innerHTML = `
+      <table>
+        <thead>
+          <tr><th>#</th><th>来自</th><th>理由</th><th>时间</th><th>操作</th></tr>
+        </thead>
+        <tbody>${items.map(f => `
+          <tr>
+            <td class="mono">${f.id}</td>
+            <td class="mono">${escapeHtml(f.initiator)}</td>
+            <td>${escapeHtml(f.reason || '-')}</td>
+            <td>${escapeHtml(formatTime(f.created_at))}</td>
+            <td>
+              <button class="btn btn-success btn-sm" onclick="doAct('accept', ${f.id})">接受</button>
+              <button class="btn btn-danger btn-sm" onclick="doAct('reject', ${f.id})">拒绝</button>
+            </td>
+          </tr>
+        `).join('')}</tbody>
+      </table>`
+  }
+
+  async function loadFriends() {
+    const box = document.getElementById('friends-list')
+    box.innerHTML = '<div class="loading">加载中...</div>'
+    const r = await agentFetch('/friendships', currentAgent)
+    if (!r.ok) {
+      box.innerHTML = `<div class="alert alert-error">${escapeHtml(r.data.msg || '加载失败')}</div>`
+      return
+    }
+    const items = r.data.data || []
+    if (!items.length) {
+      box.innerHTML = `<div class="empty">${escapeHtml(currentAgent)} 还没有好友。<br/>
+        <a href="directory.html">去目录</a> 找找或点右上角 "+ 加好友"</div>`
+      return
+    }
+    box.innerHTML = `
+      <table>
+        <thead>
+          <tr><th>#</th><th>好友</th><th>建立时间</th><th>操作</th></tr>
+        </thead>
+        <tbody>${items.map(f => `
+          <tr>
+            <td class="mono">${f.id}</td>
+            <td class="mono">${escapeHtml(f.friend)}</td>
+            <td>${escapeHtml(formatTime(f.accepted_at))}</td>
+            <td>
+              <button class="btn btn-outline btn-sm" onclick="copy('${escapeHtml(f.friend)}')">复制 ID</button>
+              <button class="btn btn-danger btn-sm" onclick="doAct('revoke', ${f.id})">解除</button>
+            </td>
+          </tr>
+        `).join('')}</tbody>
+      </table>`
+  }
+
+  function showAdd() {
+    document.getElementById('add-modal').style.display = 'flex'
+  }
+
+  async function doAdd(e) {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    const target = fd.get('target')
+    const reason = fd.get('reason') || ''
+    if (target === currentAgent) {
+      toast('不能加自己为好友', 'error'); return
+    }
+    const r = await agentFetch('/friendships/request', currentAgent, {
+      method: 'POST',
+      body: JSON.stringify({ target_agent_id: target, reason }),
+    })
+    if (!r.ok) {
+      toast(r.data.msg || '请求失败', 'error'); return
+    }
+    toast('✅ 请求已发送', 'success')
+    document.getElementById('add-modal').style.display = 'none'
+    e.target.reset()
+    loadFriends()
+  }
+
+  async function doAct(action, fid) {
+    const verbs = { accept: '接受', reject: '拒绝', revoke: '解除' }
+    if (action === 'revoke' && !confirm('确定解除好友关系?')) return
+    const r = await agentFetch(`/friendships/${fid}/${action}`, currentAgent, {
+      method: 'POST',
+    })
+    if (!r.ok) {
+      toast(r.data.msg || (verbs[action] + '失败'), 'error'); return
+    }
+    toast('✅ ' + verbs[action] + '成功', 'success')
+    loadAll()
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+server:
+  port: 11556
+  mode: debug  # debug / release
+
+database:
+  host: localhost
+  port: 3306
+  user: gateway
+  password: CHANGE_ME_IN_PRODUCTION
+  dbname: agent_gateway
+  charset: utf8mb4
+  max_idle_conns: 10
+  max_open_conns: 100
+
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+
+nacos:
+  enabled: true                # 是否启用 Nacos 配置中心
+  host: localhost              # Nacos 服务器地址
+  port: 8848                   # Nacos 端口
+  namespace: "dev"             # 命名空间（环境隔离：dev/test/prod）
+  group: "agent-gateway"       # 配置分组
+  data_id: "agent-gateway"     # 配置 ID
+  username: "nacos"            # 用户名
+  password: "nacos"            # 密码
+  cache_dir: "/tmp/nacos"      # 本地缓存目录
+  log_level: "info"            # Nacos SDK 日志级别
+  agent_registry_service: "agent-registry"  # Agent 注册发现服务名
+
+jwt:
+  # SECURITY: 生产环境必须改为强随机字符串,用 `openssl rand -base64 32` 生成
+  secret: "CHANGE_ME_IN_PRODUCTION_USE_OPENSSL_RAND"
+  expire_hours: 24
+
+rate_limit:
+  default_qps: 100
+  enabled: true
+  capability: {}   # 按 capability_id 单独配置，如 "live.anchor.task-recommend": 50
+  consumer: {}     # 按 consumer_app_id 单独配置，如 "live.search.service": 200
+
+async_mq:
+  type: memory  # memory / kafka；生产可靠模式建议 kafka
+  brokers:
+    - localhost:9092
+  topic: agent-gateway.async-task
+  group_id: agent-gateway-reliable-worker
+  queue_buffer: 4096
+
+log:
+  level: info  # debug / info / warn / error
+  format: json  # json / console
+
+telemetry:
+  service_name: agent-gateway
+  otlp_endpoint: ""  # 留空禁用 OTel，填 "localhost:4317" 启用
+  sample_rate: 0.1   # 采样率 0.0–1.0；生产建议 0.05–0.1
+
+# 内部接口鉴权 token（action_builder 调用 /internal/* 时需携带 X-Internal-Token header）
+# 留空则跳过校验（仅限开发环境）
+internal_token: ""

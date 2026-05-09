@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Key — Agent Gateway</title>
+  <script src="common.js"></script>
+  <style id="common-style"></style>
+  <style>
+    .key-card { background: white; border-radius: 8px; padding: 28px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 680px; }
+    .key-status { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 16px; background: #f5f7fa; border-radius: 6px; }
+    .key-status .label { font-size: 13px; color: #888; }
+    .key-status .value { font-family: monospace; font-size: 14px; font-weight: 600; }
+    .key-actions { display: flex; gap: 10px; margin-top: 20px; }
+    .warn-box { background: #fff3cd; border-left: 4px solid #f39c12; padding: 14px 16px; border-radius: 4px; font-size: 13px; color: #856404; margin-bottom: 16px; }
+    .key-plain { font-family: monospace; font-size: 13px; background: #2c3e50; color: #a8ff78; padding: 14px 16px; border-radius: 4px; word-break: break-all; margin: 12px 0; }
+    .init-cmd { font-family: monospace; font-size: 12px; background: #2c3e50; color: #ecf0f1; padding: 12px 16px; border-radius: 4px; word-break: break-all; margin-top: 8px; }
+    .section-title { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
+    .copy-btn { font-size: 12px; padding: 4px 10px; }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>🗝️ API Key 管理</h1>
+
+  <div class="key-card">
+    <!-- 当前 Key 状态 -->
+    <div id="key-status-area">
+      <div class="loading">加载中...</div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="key-actions">
+      <button class="btn btn-primary" onclick="generateKey()">生成 / 重新生成 API Key</button>
+      <button class="btn btn-outline" id="btn-revoke" style="display:none;color:#e74c3c;border-color:#e74c3c" onclick="revokeKey()">吊销 Key</button>
+    </div>
+
+    <!-- 客户端 Skill 初始化命令 -->
+    <div id="init-cmd-area" style="display:none;margin-top:28px">
+      <h3 style="margin-bottom:12px">客户端 Skill 初始化</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:8px">将以下命令发给你的 Agent，完成 gateway-skill 初始化：</p>
+      <div class="section-title">复制命令</div>
+      <div class="init-cmd" id="init-cmd-text"></div>
+      <button class="btn btn-outline btn-sm copy-btn" style="margin-top:8px" onclick="copyInitCmd()">复制命令</button>
+    </div>
+  </div>
+</div>
+
+<!-- 生成成功弹窗 -->
+<div class="modal-overlay" id="key-modal">
+  <div class="modal" style="max-width:560px">
+    <h3>🎉 API Key 已生成</h3>
+    <div class="warn-box">⚠️ API Key 只显示一次，请立即复制保存。关闭后无法再次查看完整 Key。</div>
+    <div class="section-title">你的 API Key</div>
+    <div class="key-plain" id="modal-key-text"></div>
+    <button class="btn btn-primary btn-sm" onclick="copyKey()">复制 Key</button>
+    <div style="margin-top:20px">
+      <div class="section-title">客户端 Skill 初始化命令</div>
+      <div class="init-cmd" id="modal-init-cmd"></div>
+      <button class="btn btn-outline btn-sm copy-btn" style="margin-top:8px" onclick="copyInitCmdFromModal()">复制命令</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal()">我已复制，关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS
+  document.getElementById('nav-placeholder').innerHTML = renderNav('apikey.html')
+
+  let currentKey = null
+
+  async function loadKeyInfo() {
+    const token = getToken()
+    if (!token) { renderNoLogin(); return }
+
+    const { ok, data } = await apiFetch('/api-keys')
+    if (!ok) { renderNoLogin(); return }
+
+    if (!data.data) {
+      renderNoKey()
+    } else {
+      renderKeyInfo(data.data)
+    }
+  }
+
+  function renderNoLogin() {
+    document.getElementById('key-status-area').innerHTML =
+      '<div class="alert alert-info">请先<a href="auth.html" style="margin:0 4px">登录</a>后管理 API Key</div>'
+  }
+
+  function renderNoKey() {
+    document.getElementById('key-status-area').innerHTML =
+      '<div class="alert alert-info" style="margin-bottom:0">当前账号尚未生成 API Key，点击下方按钮生成。</div>'
+    document.getElementById('btn-revoke').style.display = 'none'
+    document.getElementById('init-cmd-area').style.display = 'none'
+  }
+
+  function renderKeyInfo(info) {
+    const created = new Date(info.created_at).toLocaleString('zh-CN')
+    const lastUsed = info.last_used_at
+      ? new Date(info.last_used_at).toLocaleString('zh-CN')
+      : '从未使用'
+    document.getElementById('key-status-area').innerHTML = `
+      <div class="key-status">
+        <div>
+          <div class="label">Key 前缀</div>
+          <div class="value">${info.prefix}...</div>
+        </div>
+        <div style="margin-left:24px">
+          <div class="label">创建时间</div>
+          <div class="value" style="font-family:inherit">${created}</div>
+        </div>
+        <div style="margin-left:24px">
+          <div class="label">最后使用</div>
+          <div class="value" style="font-family:inherit">${lastUsed}</div>
+        </div>
+      </div>`
+    document.getElementById('btn-revoke').style.display = ''
+    renderInitCmd(null)
+  }
+
+  function renderInitCmd(keyPlain) {
+    const baseUrl = API_BASE
+    const keyPart = keyPlain || '<your-api-key>'
+    const cmd = `python gateway.py init --api-key ${keyPart} --base-url ${baseUrl}`
+    document.getElementById('init-cmd-text').textContent = cmd
+    document.getElementById('init-cmd-area').style.display = ''
+  }
+
+  async function generateKey() {
+    if (!getToken()) { toast('请先登录', 'error'); location.href = 'auth.html'; return }
+    const { ok, data } = await apiFetch('/api-keys/generate', { method: 'POST' })
+    if (!ok) { toast(data.message || '生成失败', 'error'); return }
+
+    currentKey = data.data.key
+    const baseUrl = API_BASE
+    const initCmd = `python gateway.py init --api-key ${currentKey} --base-url ${baseUrl}`
+
+    document.getElementById('modal-key-text').textContent = currentKey
+    document.getElementById('modal-init-cmd').textContent = initCmd
+    document.getElementById('key-modal').classList.add('open')
+
+    // 刷新状态区
+    loadKeyInfo()
+  }
+
+  async function revokeKey() {
+    if (!confirm('确认吊销 API Key？吊销后使用该 Key 的 Agent 将无法调用服务。')) return
+    const { ok, data } = await apiFetch('/api-keys', { method: 'DELETE' })
+    if (!ok) { toast(data.message || '吊销失败', 'error'); return }
+    toast('API Key 已吊销', 'success')
+    renderNoKey()
+    document.getElementById('key-status-area').innerHTML =
+      '<div class="alert alert-info" style="margin-bottom:0">API Key 已吊销，可重新生成。</div>'
+  }
+
+  function closeModal() {
+    document.getElementById('key-modal').classList.remove('open')
+    currentKey = null
+  }
+
+  function copyKey() {
+    navigator.clipboard.writeText(document.getElementById('modal-key-text').textContent)
+      .then(() => toast('已复制 API Key', 'success'))
+      .catch(() => toast('复制失败，请手动复制', 'error'))
+  }
+
+  function copyInitCmdFromModal() {
+    navigator.clipboard.writeText(document.getElementById('modal-init-cmd').textContent)
+      .then(() => toast('已复制初始化命令', 'success'))
+      .catch(() => toast('复制失败，请手动复制', 'error'))
+  }
+
+  function copyInitCmd() {
+    navigator.clipboard.writeText(document.getElementById('init-cmd-text').textContent)
+      .then(() => toast('已复制初始化命令', 'success'))
+      .catch(() => toast('复制失败，请手动复制', 'error'))
+  }
+
+  loadKeyInfo()
+</script>
+</body>
+</html>

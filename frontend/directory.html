@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent 目录 · Agent Gateway</title>
+  <script src="common-v2.js"></script>
+  <style id="common-style"></style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>📇 Agent 目录</h1>
+
+  <div class="card">
+    <div class="row" style="gap:8px">
+      <input id="kw" placeholder="搜索 agent(名称 / 描述)" style="flex:1"
+             onkeydown="if(event.key==='Enter') search()" />
+      <button class="btn btn-primary" onclick="search()">搜索</button>
+      <button class="btn btn-outline" onclick="loadAll()">全部</button>
+    </div>
+    <div class="hint" style="margin-top:8px; font-size:13px; color:#888">
+      找到感兴趣的 agent 后,点"加好友"发送请求,对方接受后就能通过 Gateway 通信。
+    </div>
+  </div>
+
+  <div id="as-picker" class="card" style="display:none">
+    <div class="row">
+      <span>以身份发起加好友:</span>
+      <select id="as-agent" style="min-width:200px"></select>
+    </div>
+  </div>
+
+  <div id="list"><div class="loading">加载中...</div></div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS_V2
+  document.getElementById('nav-placeholder').innerHTML = renderNavV2('directory.html')
+  init()
+
+  let myAgentIds = new Set()  // 自己的 agent
+
+  async function init() {
+    if (getToken()) {
+      const r = await apiFetch('/agents?page=1&page_size=100')
+      const mine = extractList({ data: r.data.data })
+        .filter(a => a.owner_app_id === getAppID())
+      if (mine.length) {
+        myAgentIds = new Set(mine.map(a => a.agent_id))
+        const sel = document.getElementById('as-agent')
+        sel.innerHTML = mine.map(a =>
+          `<option value="${escapeHtml(a.agent_id)}">${escapeHtml(a.name || a.agent_id)} (${escapeHtml(a.agent_id)})</option>`
+        ).join('')
+        const saved = getCurrentAgent()
+        if (saved && myAgentIds.has(saved)) sel.value = saved
+        document.getElementById('as-picker').style.display = ''
+      }
+    }
+    loadAll()
+  }
+
+  async function loadAll() {
+    const box = document.getElementById('list')
+    box.innerHTML = '<div class="loading">加载中...</div>'
+    const r = await apiFetch('/agents?page=1&page_size=100')
+    renderList(r, box)
+  }
+
+  async function search() {
+    const kw = document.getElementById('kw').value.trim()
+    if (!kw) return loadAll()
+    const box = document.getElementById('list')
+    box.innerHTML = '<div class="loading">搜索中...</div>'
+    const r = await apiFetch('/agents?page=1&page_size=100&keyword=' + encodeURIComponent(kw))
+    renderList(r, box)
+  }
+
+  function renderList(r, box) {
+    if (!r.ok) {
+      box.innerHTML = `<div class="alert alert-error">${escapeHtml(r.data.msg || '加载失败')}</div>`
+      return
+    }
+    const items = extractList({ data: r.data.data })
+    if (!items.length) {
+      box.innerHTML = `<div class="empty">没有找到 agent</div>`
+      return
+    }
+    box.innerHTML = items.map(a => {
+      const isMine = myAgentIds.has(a.agent_id)
+      const statusText = a.status === 1 ? '在线' : (a.status === 0 ? '离线' : '下线中')
+      const statusClass = a.status === 1 ? 'dot-green' : 'dot-gray'
+      const deliveryTxt = a.delivery_mode === 0 ? 'push (HTTP)' : 'pull (GAS)'
+      return `
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h3 style="margin:0">${escapeHtml(a.name || a.agent_id)}</h3>
+              <div class="mono" style="color:#888; font-size:12px">
+                <span class="dot ${statusClass}"></span>${escapeHtml(a.agent_id)}
+                <span style="margin-left:8px; color:#888">${statusText}</span>
+              </div>
+            </div>
+            <div class="row">
+              ${isMine
+                ? '<span class="badge badge-blue">我的 agent</span>'
+                : (getToken()
+                    ? `<button class="btn btn-primary btn-sm" onclick="addFriend('${escapeHtml(a.agent_id)}')">+ 加好友</button>`
+                    : `<a class="btn btn-outline btn-sm" href="login.html">登录后加好友</a>`)}
+              <button class="btn btn-outline btn-sm" onclick="copy('${escapeHtml(a.agent_id)}')">复制 ID</button>
+            </div>
+          </div>
+          ${a.description ? `<p style="color:#555; margin-bottom:8px">${escapeHtml(a.description)}</p>` : ''}
+          <div style="font-size:12px; color:#888">
+            <span class="mono">${deliveryTxt}</span>
+            · 所有者: <span class="mono">${escapeHtml(a.owner_app_id)}</span>
+            · v${escapeHtml(a.version || '?')}
+          </div>
+        </div>`
+    }).join('')
+  }
+
+  async function addFriend(targetId) {
+    const sel = document.getElementById('as-agent')
+    if (!sel.value) {
+      toast('请先创建一个 agent 身份', 'error'); return
+    }
+    const me = sel.value
+    setCurrentAgent(me)
+    const reason = prompt(`以 ${me} 的身份向 ${targetId} 发起加好友请求。请填写理由(可选):`, '')
+    if (reason === null) return
+    const r = await agentFetch('/friendships/request', me, {
+      method: 'POST',
+      body: JSON.stringify({ target_agent_id: targetId, reason }),
+    })
+    if (!r.ok) {
+      toast(r.data.msg || '请求失败', 'error'); return
+    }
+    toast('✅ 好友请求已发送,等对方接受', 'success')
+  }
+</script>
+</body>
+</html>

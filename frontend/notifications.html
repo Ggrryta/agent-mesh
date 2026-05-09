@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>实时通知 — Agent Gateway</title>
+  <script src="common.js"></script>
+  <style id="common-style"></style>
+  <style>
+    .conn-bar { display:flex; align-items:center; gap:16px; padding:14px 20px; background:white; border-radius:6px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px; flex-wrap:wrap; }
+    .conn-indicator { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:500; }
+    .dot-pulse { width:10px; height:10px; border-radius:50%; background:#aaa; }
+    .dot-pulse.connected { background:#27ae60; box-shadow:0 0 0 3px rgba(39,174,96,.2); animation:pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(39,174,96,.2)} 50%{box-shadow:0 0 0 6px rgba(39,174,96,.05)} }
+    .notif-list { display:flex; flex-direction:column; gap:10px; }
+    .notif-item { background:white; border-radius:6px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,0.08); border-left:4px solid #1a73e8; display:flex; align-items:flex-start; gap:12px; }
+    .notif-item.type-skill_apply { border-left-color:#f39c12; }
+    .notif-item.type-skill_apply_approved { border-left-color:#27ae60; }
+    .notif-item.type-skill_apply_rejected { border-left-color:#e74c3c; }
+    .notif-icon { font-size:1.4rem; flex-shrink:0; }
+    .notif-body { flex:1; }
+    .notif-title { font-weight:600; font-size:14px; margin-bottom:4px; }
+    .notif-meta { font-size:12px; color:#888; }
+    .notif-time { font-size:11px; color:#bbb; margin-left:auto; flex-shrink:0; }
+    .stats-bar { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px; }
+    .stat-item { background:white; border-radius:6px; padding:12px 20px; box-shadow:0 1px 4px rgba(0,0,0,0.08); text-align:center; min-width:100px; }
+    .stat-item .num { font-size:1.6rem; font-weight:700; color:#1a73e8; }
+    .stat-item .lbl { font-size:12px; color:#888; }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>🔔 权限通知</h1>
+
+  <!-- 连接状态栏 -->
+  <div class="conn-bar">
+    <div class="conn-indicator">
+      <div class="dot-pulse" id="conn-dot"></div>
+      <span id="conn-label">未启动</span>
+    </div>
+    <div style="font-size:13px;color:#888" id="conn-appid"></div>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button class="btn btn-primary btn-sm" id="btn-start" onclick="startPolling()">开启轮询</button>
+      <button class="btn btn-outline btn-sm" id="btn-stop" style="display:none" onclick="stopPolling()">停止</button>
+      <button class="btn btn-outline btn-sm" onclick="clearNotifs()">清空</button>
+    </div>
+  </div>
+
+  <!-- 统计 -->
+  <div class="stats-bar">
+    <div class="stat-item"><div class="num" id="stat-apply">0</div><div class="lbl">待审批</div></div>
+    <div class="stat-item"><div class="num" id="stat-approved">0</div><div class="lbl">已同意</div></div>
+    <div class="stat-item"><div class="num" id="stat-rejected">0</div><div class="lbl">已拒绝</div></div>
+  </div>
+
+  <!-- 通知列表 -->
+  <div id="notif-list" class="notif-list">
+    <div class="empty" style="background:white;border-radius:6px;padding:40px;box-shadow:0 1px 4px rgba(0,0,0,0.08)">
+      点击「开启轮询」开始监控权限申请状态变化
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS
+  document.getElementById('nav-placeholder').innerHTML = renderNav('notifications.html')
+
+  let pollTimer = null
+  let lastInbox = []
+  let lastOutbox = []
+  const notifs = []
+
+  const typeConfig = {
+    skill_apply:           { icon: '📩', title: '新权限申请', color: '#f39c12' },
+    skill_apply_approved:  { icon: '✅', title: '申请已同意', color: '#27ae60' },
+    skill_apply_rejected:  { icon: '❌', title: '申请已拒绝', color: '#e74c3c' },
+  }
+
+  function startPolling() {
+    const token = getToken()
+    if (!token) { toast('请先登录', 'error'); location.href = 'auth.html'; return }
+    const appID = getAppID()
+    document.getElementById('conn-appid').textContent = '账号：' + (appID || '—')
+    setConnState('connected')
+    document.getElementById('btn-start').style.display = 'none'
+    document.getElementById('btn-stop').style.display = ''
+    poll() // 立即拉一次
+    pollTimer = setInterval(poll, 10000) // 10 秒轮询
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+    setConnState('disconnected')
+    document.getElementById('btn-start').style.display = ''
+    document.getElementById('btn-stop').style.display = 'none'
+  }
+
+  function setConnState(state) {
+    const dot = document.getElementById('conn-dot')
+    const label = document.getElementById('conn-label')
+    dot.className = 'dot-pulse ' + (state === 'connected' ? 'connected' : '')
+    label.textContent = state === 'connected' ? '轮询中（10s）' : '未启动'
+    label.style.color = state === 'connected' ? '#27ae60' : '#aaa'
+  }
+
+  async function poll() {
+    const token = getToken()
+    if (!token) { stopPolling(); return }
+    try {
+      const [inboxRes, outboxRes] = await Promise.all([
+        apiFetch('/apply/inbox'),
+        apiFetch('/apply/outbox')
+      ])
+      const inbox = (inboxRes.ok && inboxRes.data.code === 0) ? (inboxRes.data.data.items || []) : []
+      const outbox = (outboxRes.ok && outboxRes.data.code === 0) ? (outboxRes.data.data.items || []) : []
+
+      // 检测新增和状态变化
+      detectChanges(inbox, lastInbox, true)
+      detectChanges(outbox, lastOutbox, false)
+
+      lastInbox = inbox
+      lastOutbox = outbox
+
+      updateStats(inbox, outbox)
+    } catch (e) {
+      console.error('poll error', e)
+    }
+  }
+
+  function detectChanges(current, prev, isInbox) {
+    const prevMap = {}
+    prev.forEach(a => { prevMap[a.id] = a.status })
+
+    for (const item of current) {
+      const oldStatus = prevMap[item.id]
+      // 新增的 pending 申请
+      if (!oldStatus && isInbox && item.status === 1) {
+        addNotif('skill_apply', {
+          apply_id: item.id,
+          skill_id: item.skill_id,
+          applicant: item.applicant_app_id,
+          reason: item.reason
+        })
+      }
+      // 从 pending 变为 approved/rejected（发件箱视角）
+      if (oldStatus === 1 && item.status === 2) {
+        addNotif('skill_apply_approved', {
+          apply_id: item.id,
+          skill_id: item.skill_id
+        })
+      }
+      if (oldStatus === 1 && item.status === 3) {
+        addNotif('skill_apply_rejected', {
+          apply_id: item.id,
+          skill_id: item.skill_id
+        })
+      }
+    }
+  }
+
+  function addNotif(type, payload) {
+    const cfg = typeConfig[type] || { icon: '📌', title: type }
+    const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+    notifs.unshift({ type, payload, time, cfg })
+    if (notifs.length > 100) notifs.length = 100 // 最多保留 100 条
+    renderNotifs()
+  }
+
+  function updateStats(inbox, outbox) {
+    const pending = inbox.filter(a => a.status === 1).length
+    const approved = outbox.filter(a => a.status === 2).length
+    const rejected = outbox.filter(a => a.status === 3).length
+    document.getElementById('stat-apply').textContent = pending
+    document.getElementById('stat-approved').textContent = approved
+    document.getElementById('stat-rejected').textContent = rejected
+  }
+
+  function renderNotifs() {
+    if (!notifs.length) {
+      document.getElementById('notif-list').innerHTML = '<div class="empty" style="background:white;border-radius:6px;padding:40px;box-shadow:0 1px 4px rgba(0,0,0,0.08)">暂无通知</div>'
+      return
+    }
+    document.getElementById('notif-list').innerHTML = notifs.map(n => {
+      const detail = buildDetail(n.type, n.payload)
+      return `<div class="notif-item type-${n.type}">
+        <div class="notif-icon">${n.cfg.icon}</div>
+        <div class="notif-body">
+          <div class="notif-title">${n.cfg.title}</div>
+          <div class="notif-meta">${detail}</div>
+        </div>
+        <div class="notif-time">${n.time}</div>
+      </div>`
+    }).join('')
+  }
+
+  function buildDetail(type, p) {
+    if (type === 'skill_apply') return `申请 ID：${p.apply_id}，Skill：<code>${p.skill_id}</code>，申请方：${p.applicant}，原因：${p.reason || '—'}`
+    if (type === 'skill_apply_approved') return `申请 ID：${p.apply_id}，Skill：<code>${p.skill_id}</code> 已获授权`
+    if (type === 'skill_apply_rejected') return `申请 ID：${p.apply_id}，Skill：<code>${p.skill_id}</code> 被拒绝`
+    return JSON.stringify(p)
+  }
+
+  function clearNotifs() {
+    notifs.length = 0
+    renderNotifs()
+  }
+</script>
+</body>
+</html>
