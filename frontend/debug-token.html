@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token 诊断工具 — Agent Gateway</title>
+  <script src="common.js"></script>
+  <style id="common-style"></style>
+  <style>
+    .info-box { background: white; border-radius: 6px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .info-row { display: flex; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+    .info-row:last-child { border-bottom: none; }
+    .info-label { width: 150px; font-weight: 600; color: #666; }
+    .info-value { flex: 1; font-family: monospace; font-size: 13px; word-break: break-all; }
+    .status-ok { color: #27ae60; font-weight: 600; }
+    .status-error { color: #e74c3c; font-weight: 600; }
+    .status-warn { color: #f39c12; font-weight: 600; }
+    .btn-group { display: flex; gap: 10px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>🔍 Token 诊断工具</h1>
+
+  <div class="info-box">
+    <h2 style="margin-top:0">1. LocalStorage 状态</h2>
+    <div class="info-row">
+      <div class="info-label">ag_app_id</div>
+      <div class="info-value" id="local-appid">—</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">ag_token</div>
+      <div class="info-value" id="local-token">—</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">存储状态</div>
+      <div class="info-value" id="local-status">—</div>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <h2 style="margin-top:0">2. Token 解析</h2>
+    <div class="info-row">
+      <div class="info-label">Token 格式</div>
+      <div class="info-value" id="token-format">—</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">App ID</div>
+      <div class="info-value" id="token-appid">—</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">过期时间</div>
+      <div class="info-value" id="token-expire">—</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">是否过期</div>
+      <div class="info-value" id="token-expired">—</div>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <h2 style="margin-top:0">3. API 测试</h2>
+    <div class="info-row">
+      <div class="info-label">GET /ping</div>
+      <div class="info-value" id="test-ping">—</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">GET /skills</div>
+      <div class="info-value" id="test-skills">—</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">GET /apply/inbox</div>
+      <div class="info-value" id="test-apply">—</div>
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-primary" onclick="runDiagnostics()">🔄 重新诊断</button>
+    <button class="btn btn-danger" onclick="clearAndReload()">🗑️ 清除 Token 并刷新</button>
+    <a href="auth.html" class="btn btn-outline">🔑 去登录</a>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS
+  document.getElementById('nav-placeholder').innerHTML = renderNav('')
+
+  function decodeJWT(token) {
+    try {
+      const parts = token.split('.')
+      if (parts.length !== 3) return null
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+      return payload
+    } catch (e) {
+      return null
+    }
+  }
+
+  async function runDiagnostics() {
+    // 1. 检查 LocalStorage
+    const appID = getAppID()
+    const token = getToken()
+    
+    document.getElementById('local-appid').textContent = appID || '—'
+    document.getElementById('local-token').textContent = token ? token.substring(0, 50) + '...' : '—'
+    
+    if (appID && token) {
+      document.getElementById('local-status').innerHTML = '<span class="status-ok">✅ Token 已存储</span>'
+    } else if (!appID && !token) {
+      document.getElementById('local-status').innerHTML = '<span class="status-error">❌ 未登录，无 Token</span>'
+    } else {
+      document.getElementById('local-status').innerHTML = '<span class="status-warn">⚠️ Token 不完整</span>'
+    }
+
+    // 2. 解析 Token
+    if (token) {
+      const payload = decodeJWT(token)
+      if (payload) {
+        document.getElementById('token-format').innerHTML = '<span class="status-ok">✅ 格式正确</span>'
+        document.getElementById('token-appid').textContent = payload.app_id || '—'
+        
+        if (payload.exp) {
+          const expireDate = new Date(payload.exp * 1000)
+          document.getElementById('token-expire').textContent = expireDate.toLocaleString('zh-CN')
+          
+          const now = Date.now() / 1000
+          if (payload.exp < now) {
+            document.getElementById('token-expired').innerHTML = '<span class="status-error">❌ 已过期</span>'
+          } else {
+            const hoursLeft = ((payload.exp - now) / 3600).toFixed(1)
+            document.getElementById('token-expired').innerHTML = `<span class="status-ok">✅ 有效（还剩 ${hoursLeft} 小时）</span>`
+          }
+        } else {
+          document.getElementById('token-expire').textContent = '—'
+          document.getElementById('token-expired').innerHTML = '<span class="status-warn">⚠️ 无过期时间</span>'
+        }
+      } else {
+        document.getElementById('token-format').innerHTML = '<span class="status-error">❌ 格式错误</span>'
+      }
+    } else {
+      document.getElementById('token-format').textContent = '—'
+      document.getElementById('token-appid').textContent = '—'
+      document.getElementById('token-expire').textContent = '—'
+      document.getElementById('token-expired').textContent = '—'
+    }
+
+    // 3. API 测试
+    // Test /ping
+    try {
+      const res = await fetch(API_BASE + '/ping')
+      const data = await res.json()
+      document.getElementById('test-ping').innerHTML = res.ok 
+        ? '<span class="status-ok">✅ 服务正常</span>' 
+        : '<span class="status-error">❌ 服务异常</span>'
+    } catch (e) {
+      document.getElementById('test-ping').innerHTML = '<span class="status-error">❌ 无法连接</span>'
+    }
+
+    // Test /skills
+    if (token) {
+      const { ok, status, data } = await apiFetch('/skills')
+      if (ok && data.code === 0) {
+        document.getElementById('test-skills').innerHTML = '<span class="status-ok">✅ 访问成功</span>'
+      } else if (status === 401) {
+        document.getElementById('test-skills').innerHTML = '<span class="status-error">❌ Token 无效或过期</span>'
+      } else {
+        document.getElementById('test-skills').innerHTML = `<span class="status-warn">⚠️ HTTP ${status}: ${data.message || '未知错误'}</span>`
+      }
+    } else {
+      document.getElementById('test-skills').innerHTML = '<span class="status-warn">⚠️ 无 Token</span>'
+    }
+
+    // Test /apply/inbox
+    if (token) {
+      const { ok, status, data } = await apiFetch('/apply/inbox')
+      if (ok && data.code === 0) {
+        document.getElementById('test-apply').innerHTML = '<span class="status-ok">✅ 访问成功</span>'
+      } else if (status === 401) {
+        document.getElementById('test-apply').innerHTML = '<span class="status-error">❌ Token 无效或过期</span>'
+      } else {
+        document.getElementById('test-apply').innerHTML = `<span class="status-warn">⚠️ HTTP ${status}: ${data.message || '未知错误'}</span>`
+      }
+    } else {
+      document.getElementById('test-apply').innerHTML = '<span class="status-warn">⚠️ 无 Token</span>'
+    }
+  }
+
+  function clearAndReload() {
+    if (confirm('确定要清除 Token 并刷新页面吗？')) {
+      clearAuth()
+      location.href = 'auth.html'
+    }
+  }
+
+  // 页面加载时自动运行诊断
+  runDiagnostics()
+</script>
+</body>
+</html>

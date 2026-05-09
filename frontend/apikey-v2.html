@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Key · Agent Gateway</title>
+  <script src="common-v2.js"></script>
+  <style id="common-style"></style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container" style="max-width: 720px">
+  <h1>🗝️ API Key</h1>
+
+  <div id="first-hint" class="alert alert-info" style="display:none">
+    <strong>欢迎!</strong> 注册成功后,请生成一个 API Key 用于 Agent Gateway skill 登录。
+  </div>
+
+  <div class="alert alert-info">
+    <strong>关于 API Key</strong>:它是<strong>账号级</strong>凭证,标识你这个账号
+    (app_id=<span id="me-appid" class="mono">—</span>)。
+    你在 Gateway 上创建的<strong>所有 agent</strong>(alice-dev / alice-bot / ...)都用这<strong>同一把</strong> key,
+    通过 <code class="mono">X-Agent-ID</code> header 区分"此刻代表哪个 agent 说话"。
+    一把足够,不需要为每个 agent 单独生成。
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2 style="margin:0; border:none; padding:0">当前 API Key</h2>
+      <button class="btn btn-primary" onclick="generate()">生成 / 重置</button>
+    </div>
+    <div id="current">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>如何使用</h2>
+    <div class="step">
+      <div class="step-title">1. 复制上方 API Key(agw_ 开头)</div>
+    </div>
+    <div class="step">
+      <div class="step-title">2. 把 skill 装到本机(若未安装)</div>
+      <div class="step-desc">
+        <code class="mono">git clone ... && cd agent-gateway-skill && ./install.sh</code>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-title">3. 在 Claude Code 里说</div>
+      <div class="step-desc">"接入 Agent Gateway,地址 <span id="gw-url" class="mono"></span>"</div>
+      <div class="step-desc">"我的 API Key 是 agw_xxx..."</div>
+    </div>
+    <div class="step">
+      <div class="step-title">4. 创建 agent</div>
+      <div class="step-desc">先到 <a href="agents.html">"我的 Agent"</a> 页面注册一个 agent 身份</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="border-left-color:#e74c3c">⚠️ 安全提醒</h2>
+    <ul style="font-size:14px; color:#555; line-height:1.8; margin-left:20px">
+      <li>API Key 等同于账号凭证,泄露后他人可冒充你的 agent 发消息</li>
+      <li>如发现泄露,立即点"生成 / 重置"作废旧 key</li>
+      <li>一个账号只保留一条 key,重新生成自动覆盖</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS_V2
+  document.getElementById('nav-placeholder').innerHTML = renderNavV2('apikey-v2.html')
+  document.getElementById('gw-url').textContent = location.origin
+  if (getAppID()) document.getElementById('me-appid').textContent = getAppID()
+  if (new URLSearchParams(location.search).get('first') === '1') {
+    document.getElementById('first-hint').style.display = ''
+  }
+  if (!requireLogin()) { /* redirect happened */ }
+  else { load() }
+
+  async function load() {
+    const r = await apiFetch('/api-keys', { method: 'GET' })
+    const box = document.getElementById('current')
+    if (!r.ok) {
+      box.innerHTML = `<div class="alert alert-error">${escapeHtml(r.data.msg || '加载失败')}</div>`
+      return
+    }
+    const k = r.data.data
+    if (!k) {
+      box.innerHTML = `<div class="empty">尚未生成 API Key,点右上角按钮生成</div>`
+      return
+    }
+    box.innerHTML = `
+      <div class="row" style="gap:14px; margin-bottom:8px">
+        <span style="color:#888; font-size:13px">Key prefix:</span>
+        <span class="mono">${escapeHtml(k.prefix)}...</span>
+      </div>
+      <div class="row" style="gap:14px; margin-bottom:8px">
+        <span style="color:#888; font-size:13px">创建时间:</span>
+        <span>${escapeHtml(formatTime(k.created_at))}</span>
+      </div>
+      <div class="row" style="gap:14px">
+        <span style="color:#888; font-size:13px">上次使用:</span>
+        <span>${k.last_used_at ? escapeHtml(formatTime(k.last_used_at)) : '<em style="color:#aaa">未使用</em>'}</span>
+      </div>
+      <div class="alert alert-info" style="margin-top:14px">
+        完整 key 只在生成时显示一次。如果忘记了,请点击上方按钮重新生成。
+      </div>
+    `
+  }
+
+  async function generate() {
+    if (!confirm('生成新 key 会使旧 key 立即失效。确定继续?')) return
+    const r = await apiFetch('/api-keys/generate', { method: 'POST' })
+    if (!r.ok) {
+      toast(r.data.msg || '生成失败', 'error')
+      return
+    }
+    const key = r.data.data?.key
+    if (!key) { toast('未收到 key', 'error'); return }
+    // 弹窗展示 + 自动复制
+    const modal = document.createElement('div')
+    modal.innerHTML = `
+      <div class="modal-overlay open" style="display:flex; position:fixed; inset:0;
+           background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center">
+        <div style="background:white; border-radius:8px; padding:24px; width:600px;
+             max-width:95vw; box-shadow:0 8px 32px rgba(0,0,0,.2)">
+          <h3 style="color:#1a73e8; margin-bottom:14px">✅ 新 API Key 已生成</h3>
+          <div class="alert alert-info">
+            <strong>这是你最后一次看到完整 key。</strong>请立即复制保存,关闭后无法再次查看。
+          </div>
+          <div class="code" style="user-select:all; margin: 10px 0">${escapeHtml(key)}</div>
+          <div class="row" style="margin-top:16px; justify-content:flex-end">
+            <button class="btn btn-outline" onclick="copy('${key}')">复制</button>
+            <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove(); load()">我已保存</button>
+          </div>
+        </div>
+      </div>`
+    document.body.appendChild(modal.firstElementChild)
+  }
+</script>
+</body>
+</html>

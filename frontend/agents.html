@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的 Agent · Agent Gateway</title>
+  <script src="common-v2.js"></script>
+  <style id="common-style"></style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <div class="row" style="justify-content:space-between; margin-bottom:16px">
+    <h1 style="margin:0; border:none; padding:0">🤖 我的 Agent</h1>
+    <button class="btn btn-primary" onclick="showCreate()">+ 注册新 Agent</button>
+  </div>
+
+  <div class="alert alert-info">
+    <strong>Agent 是什么</strong> —— 你在 Agent Gateway 上的身份单元,每个 agent 有独立的 agent_id 和技能集,
+    别人通过 agent_id 找到你协作。一个账号可以有多个 agent(例如 alice-dev、alice-bot)。
+  </div>
+
+  <div id="list">
+    <div class="loading">加载中...</div>
+  </div>
+
+  <!-- 创建 modal -->
+  <div id="create-modal" class="modal-overlay" style="display:none; position:fixed; inset:0;
+       background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center">
+    <div style="background:white; border-radius:8px; padding:24px; width:640px;
+         max-width:95vw; max-height:90vh; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,.2)">
+      <h3 style="color:#1a73e8; margin-bottom:16px">注册新 Agent</h3>
+      <form onsubmit="doCreate(event)">
+        <div class="form-row">
+          <label>agent_id * <span style="color:#888; font-weight:normal">(全局唯一,不可修改)</span></label>
+          <input name="agent_id" required pattern="[a-z0-9][a-z0-9._-]{2,63}"
+                 placeholder="例如 alice-dev" />
+          <div class="hint">3-64 字符,小写字母数字 + . _ -</div>
+        </div>
+        <div class="form-row">
+          <label>显示名称 *</label>
+          <input name="name" required placeholder="例如 Alice 的开发助手" />
+        </div>
+        <div class="form-row">
+          <label>描述</label>
+          <textarea name="description" rows="2"
+                    placeholder="这个 agent 做什么?别人看目录时会看到"></textarea>
+        </div>
+        <div class="form-row">
+          <label>版本</label>
+          <input name="version" value="1.0.0" placeholder="语义化版本,如 1.0.0" />
+        </div>
+        <div class="form-row">
+          <label>技能列表(每行一个 JSON)</label>
+          <textarea name="skills" rows="5" class="mono"
+                    placeholder='{"id":"code-review","name":"代码审查","description":"..."}
+{"id":"summarize","name":"总结","description":"..."}'></textarea>
+          <div class="hint">
+            可以留空(Phase 2 再补)。每行一个 JSON 对象,字段:
+            <code>id, name, description, tags?, inputModes?, outputModes?</code>
+          </div>
+        </div>
+        <div class="alert alert-info" style="font-size:13px">
+          投递模式默认 <strong>pull</strong>(通过 GAS 代理)。
+          Agent 的 URL 会从 Gateway 自动获取,无需填写。
+        </div>
+        <div class="row" style="justify-content:flex-end; margin-top:16px">
+          <button type="button" class="btn btn-outline"
+                  onclick="document.getElementById('create-modal').style.display='none'">取消</button>
+          <button type="submit" class="btn btn-primary">创建</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS_V2
+  document.getElementById('nav-placeholder').innerHTML = renderNavV2('agents.html')
+  if (!requireLogin()) {} else { load() }
+
+  async function load() {
+    const appID = getAppID()
+    // 查我的 agent:用 owner_app_id 过滤,但公开列表 API 可能不支持按 owner 查
+    // 这里用 /agents?page=1 然后前端过滤 owner_app_id
+    const r = await apiFetch('/agents?page=1&page_size=100')
+    const box = document.getElementById('list')
+    if (!r.ok) {
+      box.innerHTML = `<div class="alert alert-error">${escapeHtml(r.data.msg || '加载失败')}</div>`
+      return
+    }
+    const all = extractList({ data: r.data.data })
+    const mine = all.filter(a => a.owner_app_id === appID)
+
+    if (!mine.length) {
+      box.innerHTML = `
+        <div class="card" style="text-align:center; padding:40px 20px">
+          <p style="color:#888; margin-bottom:16px">你还没有 agent</p>
+          <button class="btn btn-primary" onclick="showCreate()">注册第一个 Agent</button>
+        </div>`
+      return
+    }
+    const rows = mine.map(renderAgentCard).join('')
+    box.innerHTML = rows
+  }
+
+  function renderAgentCard(a) {
+    const statusMap = { 0: 'badge-gray', 1: 'badge-green', 2: 'badge-yellow' }
+    const statusText = { 0: '离线', 1: '在线', 2: '下线中' }
+    const dmode = a.delivery_mode === 0 ? 'push (HTTP server)' : 'pull (GAS)'
+    return `
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h3 style="margin:0">${escapeHtml(a.name || a.agent_id)}</h3>
+            <div class="mono" style="color:#888; font-size:12px">${escapeHtml(a.agent_id)}</div>
+          </div>
+          <div class="row">
+            <span class="badge ${statusMap[a.status] || 'badge-gray'}">${statusText[a.status] || '未知'}</span>
+            <button class="btn btn-outline btn-sm"
+                    onclick="copy('${escapeHtml(a.agent_id)}')">复制 ID</button>
+            <button class="btn btn-danger btn-sm"
+                    onclick="doDeregister('${escapeHtml(a.agent_id)}')">注销</button>
+          </div>
+        </div>
+        ${a.description ? `<p style="color:#555; margin-bottom:8px">${escapeHtml(a.description)}</p>` : ''}
+        <div style="font-size:13px; color:#666; line-height:1.8">
+          <div>投递模式: <span class="mono">${dmode}</span></div>
+          <div>版本: <span class="mono">${escapeHtml(a.version || '-')}</span></div>
+          <div>创建: ${escapeHtml(formatTime(a.created_at))}</div>
+          <div>最后心跳: ${a.last_heartbeat_at ? escapeHtml(formatTime(a.last_heartbeat_at)) : '<em style="color:#aaa">从未</em>'}</div>
+        </div>
+      </div>`
+  }
+
+  function showCreate() {
+    document.getElementById('create-modal').style.display = 'flex'
+  }
+
+  async function doCreate(e) {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    const b = Object.fromEntries(fd.entries())
+    // 解析 skills
+    let skills = []
+    if (b.skills && b.skills.trim()) {
+      try {
+        skills = b.skills.trim().split(/\n+/).filter(s => s.trim()).map(s => {
+          const o = JSON.parse(s)
+          return {
+            id: o.id, name: o.name, description: o.description || '',
+            tags: o.tags || [], inputModes: o.inputModes || ['application/json'],
+            outputModes: o.outputModes || ['application/json'],
+          }
+        })
+      } catch (err) {
+        toast('skills JSON 解析失败: ' + err.message, 'error')
+        return
+      }
+    }
+    const body = {
+      agent_id: b.agent_id,
+      agent_card: {
+        name: b.name,
+        description: b.description,
+        version: b.version || '1.0.0',
+        url: '',
+        capabilities: { streaming: false, pushNotifications: false },
+        skills,
+      },
+    }
+    const r = await apiFetch('/agents/register', {
+      method: 'POST', body: JSON.stringify(body),
+    })
+    if (!r.ok) {
+      toast(r.data.msg || '创建失败', 'error')
+      return
+    }
+    toast('✅ 创建成功', 'success')
+    document.getElementById('create-modal').style.display = 'none'
+    e.target.reset()
+    load()
+  }
+
+  async function doDeregister(agentId) {
+    if (!confirm(`确定注销 ${agentId}?此操作不可恢复。`)) return
+    const r = await apiFetch(`/agents/${encodeURIComponent(agentId)}`, {
+      method: 'DELETE',
+    })
+    if (!r.ok) {
+      toast(r.data.msg || '注销失败', 'error')
+      return
+    }
+    toast('✅ 已注销', 'success')
+    load()
+  }
+</script>
+</body>
+</html>

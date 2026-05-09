@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 / 注册 · Agent Gateway</title>
+  <script src="common-v2.js"></script>
+  <style id="common-style"></style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container" style="max-width: 520px">
+  <h1>🔑 登录 / 注册</h1>
+
+  <div class="card">
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-tab="login">登录</div>
+      <div class="tab" data-tab="register">注册新账号</div>
+    </div>
+
+    <div class="tab-panel active" data-panel="login">
+      <form onsubmit="doLogin(event)">
+        <div class="form-row">
+          <label>账号 ID(app_id)</label>
+          <input name="app_id" placeholder="例如 alice.dev" required />
+        </div>
+        <div class="form-row">
+          <label>密码</label>
+          <input name="secret" type="password" placeholder="至少 12 个字符" required />
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%">登录</button>
+      </form>
+      <div id="login-msg" style="margin-top: 16px"></div>
+    </div>
+
+    <div class="tab-panel" data-panel="register">
+      <form onsubmit="doRegister(event)">
+        <div class="form-row">
+          <label>账号 ID(app_id)</label>
+          <input name="app_id" placeholder="3-128 字符,小写字母数字或 . _ -" required pattern="[a-z0-9][a-z0-9._-]{2,127}" />
+          <div class="hint">例如 your.name 或 alice.dev。注册后不可修改。</div>
+        </div>
+        <div class="form-row">
+          <label>密码</label>
+          <input name="secret" type="password" placeholder="至少 12 个字符" required minlength="12" />
+        </div>
+        <div class="form-row">
+          <label>描述(可选)</label>
+          <input name="description" placeholder="方便你自己识别" />
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%">注册 + 自动登录</button>
+      </form>
+      <div id="register-msg" style="margin-top: 16px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS_V2
+  document.getElementById('nav-placeholder').innerHTML = renderNavV2('login.html')
+
+  // 已登录则跳转
+  if (getToken()) {
+    const next = new URLSearchParams(location.search).get('next') || 'index-v2.html'
+    location.href = next
+  }
+
+  // tab 切换
+  document.querySelectorAll('#tabs .tab').forEach(t => {
+    t.onclick = () => {
+      document.querySelectorAll('#tabs .tab').forEach(x => x.classList.remove('active'))
+      document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'))
+      t.classList.add('active')
+      document.querySelector(`[data-panel="${t.dataset.tab}"]`).classList.add('active')
+    }
+  })
+
+  async function doLogin(e) {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    const body = Object.fromEntries(fd.entries())
+    const msg = document.getElementById('login-msg')
+    msg.innerHTML = '<div class="loading">登录中...</div>'
+    const r = await apiFetch('/auth/token', { method: 'POST', body: JSON.stringify(body) })
+    if (!r.ok) {
+      msg.innerHTML = `<div class="alert alert-error">${escapeHtml(r.data.msg || '登录失败')}</div>`
+      return
+    }
+    const token = r.data.data && r.data.data.token
+    if (!token) {
+      msg.innerHTML = `<div class="alert alert-error">未收到 token</div>`
+      return
+    }
+    setAuth(body.app_id, token)
+    msg.innerHTML = '<div class="alert alert-success">✅ 登录成功,正在跳转...</div>'
+    setTimeout(() => {
+      const next = new URLSearchParams(location.search).get('next') || 'index-v2.html'
+      location.href = next
+    }, 400)
+  }
+
+  async function doRegister(e) {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    const body = Object.fromEntries(fd.entries())
+    const msg = document.getElementById('register-msg')
+    msg.innerHTML = '<div class="loading">注册中...</div>'
+    const r = await apiFetch('/register', { method: 'POST', body: JSON.stringify(body) })
+    if (!r.ok) {
+      msg.innerHTML = `<div class="alert alert-error">${escapeHtml(r.data.msg || '注册失败')}</div>`
+      return
+    }
+    // 注册成功后自动登录
+    const r2 = await apiFetch('/auth/token', {
+      method: 'POST',
+      body: JSON.stringify({ app_id: body.app_id, secret: body.secret }),
+    })
+    if (!r2.ok || !r2.data.data?.token) {
+      msg.innerHTML = `<div class="alert alert-success">✅ 注册成功,请切换到登录标签登录</div>`
+      return
+    }
+    setAuth(body.app_id, r2.data.data.token)
+    msg.innerHTML = '<div class="alert alert-success">✅ 注册成功,正在跳转...</div>'
+    setTimeout(() => location.href = 'apikey-v2.html?first=1', 600)
+  }
+</script>
+<style>
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 20px; }
+  .tab { padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 500; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+</style>
+</body>
+</html>

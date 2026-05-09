@@ -1,0 +1,62 @@
+# ─── Secrets & local config ─────────────────────
+.env
+.env.local
+.env.*.local
+config/config.yaml
+config/config.docker.yaml
+*.pem
+*.key
+*.p12
+.credentials
+
+# ─── Build artifacts ────────────────────────────
+/agent-gateway
+/migrate
+/main
+bin/
+*.exe
+*.test
+*.out
+
+# ─── Go ─────────────────────────────────────────
+vendor/
+coverage.html
+coverage.out
+
+# ─── Python ─────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# ─── Docker / runtime ───────────────────────────
+/data/
+/var/
+
+# ─── IDE ────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*.iml
+
+# ─── OS ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Logs ───────────────────────────────────────
+*.log
+logs/
+
+# ─── Temp ───────────────────────────────────────
+*.tmp
+*.bak
+/tmp/
+
+# ─── skill user data(本地安装后才生成)─────────
+.agent-gateway/

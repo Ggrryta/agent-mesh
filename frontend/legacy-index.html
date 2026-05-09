@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Gateway — 管理控制台</title>
+  <script src="common.js"></script>
+  <style id="common-style"></style>
+  <style>
+    .hero { text-align: center; padding: 48px 24px 32px; }
+    .hero h1 { border: none; font-size: 2rem; margin-bottom: 8px; }
+    .hero p { color: #666; font-size: 16px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; margin-top: 32px; }
+    .nav-card { background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-decoration: none; color: inherit; display: block; transition: transform .15s, box-shadow .15s; border-top: 4px solid #1a73e8; }
+    .nav-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+    .nav-card .icon { font-size: 2rem; margin-bottom: 12px; }
+    .nav-card h3 { color: #1a73e8; margin-bottom: 6px; }
+    .nav-card p { font-size: 13px; color: #666; }
+    .status-bar { background: white; border-radius: 6px; padding: 16px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+    .status-item { font-size: 14px; }
+    .status-item span { font-weight: 600; color: #1a73e8; }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <div class="hero">
+    <h1>🌐 Agent Gateway</h1>
+    <p>统一调用网关 — 管理控制台</p>
+  </div>
+
+  <div class="status-bar" id="status-bar">
+    <div class="status-item">状态：<span id="login-status">检查中...</span></div>
+    <div class="status-item" id="appid-item" style="display:none">当前账号：<span id="current-appid"></span></div>
+    <div style="margin-left:auto">
+      <a href="auth.html" class="btn btn-primary btn-sm" id="login-btn">登录 / 注册</a>
+      <button class="btn btn-outline btn-sm" id="logout-btn" style="display:none" onclick="logout()">退出登录</button>
+    </div>
+  </div>
+
+  <div class="cards">
+    <a href="auth.html" class="nav-card">
+      <div class="icon">🔑</div>
+      <h3>注册 / 登录</h3>
+      <p>自助注册账号，获取 JWT Token，开始使用网关服务</p>
+    </a>
+    <a href="skills.html" class="nav-card">
+      <div class="icon">⚡</div>
+      <h3>Skill 管理</h3>
+      <p>注册、查看、编辑、删除 Skill，设置公开/私有可见性</p>
+    </a>
+    <a href="apply.html" class="nav-card">
+      <div class="icon">📋</div>
+      <h3>权限申请</h3>
+      <p>申请私有 Skill 的调用权限，或审批他人的申请</p>
+    </a>
+    <a href="invoke.html" class="nav-card">
+      <div class="icon">🚀</div>
+      <h3>调用测试台</h3>
+      <p>选择 Skill，填写 input，发起同步/异步/流式调用</p>
+    </a>
+    <a href="notifications.html" class="nav-card">
+      <div class="icon">🔔</div>
+      <h3>实时通知</h3>
+      <p>SSE 长连接，实时接收申请提交和审批结果通知</p>
+    </a>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS
+  document.getElementById('nav-placeholder').innerHTML = renderNav('index.html')
+
+  const appID = getAppID()
+  const token = getToken()
+  if (appID && token) {
+    document.getElementById('login-status').textContent = '已登录'
+    document.getElementById('login-status').style.color = '#27ae60'
+    document.getElementById('appid-item').style.display = ''
+    document.getElementById('current-appid').textContent = appID
+    document.getElementById('login-btn').style.display = 'none'
+    document.getElementById('logout-btn').style.display = ''
+    
+    // 检查 token 是否过期
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+      if (payload.exp && payload.exp < Date.now() / 1000) {
+        document.getElementById('login-status').textContent = 'Token 已过期'
+        document.getElementById('login-status').style.color = '#e74c3c'
+        document.getElementById('login-btn').style.display = ''
+        document.getElementById('login-btn').textContent = '重新登录'
+        document.getElementById('logout-btn').style.display = 'none'
+      }
+    } catch (e) {
+      // 忽略解析错误
+    }
+  } else {
+    document.getElementById('login-status').textContent = '未登录'
+    document.getElementById('login-status').style.color = '#e74c3c'
+  }
+</script>
+</body>
+</html>
