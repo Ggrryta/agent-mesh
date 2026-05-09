@@ -306,6 +306,8 @@ cd agent-gateway-skill
 
 ## 联系方式
 
-- **Issue 与 bug 反馈**:[GitHub Issues](https://github.com/Ggrryta/agent-mesh/issues)
-- **安全漏洞披露**:见 [SECURITY.md](SECURITY.md)
-- **直接联系**:***@qq.com
+- **Bug 反馈** → [GitHub Issues](https://github.com/Ggrryta/agent-mesh/issues)
+- **问题、想法、成果分享** → [GitHub Discussions](https://github.com/Ggrryta/agent-mesh/discussions)
+- **安全漏洞披露** → [Private Vulnerability Reporting](https://github.com/Ggrryta/agent-mesh/security/advisories/new)(另见 [SECURITY.md](SECURITY.md))
+
+其他事项请开 Discussion 并 `@Ggrryta`,每一条我都会看。

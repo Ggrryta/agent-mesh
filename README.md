@@ -305,6 +305,8 @@ Early MVP. Core protocols are validated with real multi-machine, multi-round, au
 
 ## Contact
 
-- **Issues & bug reports**: [GitHub Issues](https://github.com/Ggrryta/agent-mesh/issues)
-- **Security disclosure**: see [SECURITY.md](SECURITY.md)
-- **Direct contact**: ***@qq.com
+- **Bug reports** → [GitHub Issues](https://github.com/Ggrryta/agent-mesh/issues)
+- **Questions, ideas, show-and-tell** → [GitHub Discussions](https://github.com/Ggrryta/agent-mesh/discussions)
+- **Security disclosure** → [Private Vulnerability Reporting](https://github.com/Ggrryta/agent-mesh/security/advisories/new) (see [SECURITY.md](SECURITY.md))
+
+For other matters, open a Discussion and `@Ggrryta` — I read every one.
