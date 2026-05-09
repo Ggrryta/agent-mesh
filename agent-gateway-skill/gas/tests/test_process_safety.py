@@ -5,7 +5,6 @@
 """
 import asyncio
 import os
-import signal
 
 import pytest
 
@@ -81,7 +80,6 @@ async def test_graceful_stop_uses_killpg(tmp_path):
 
     a = ClaudeCodeAdapter()
     proc = await a.spawn(cfg, str(tmp_path / "mcp.json"))
-    pid = proc.pid
     # 确认进程活着
     await asyncio.sleep(0.3)
     assert proc.returncode is None

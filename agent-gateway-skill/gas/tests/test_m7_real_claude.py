@@ -216,7 +216,7 @@ async def test_real_claude_two_agents(mega_env):
     bob_status = json.loads(_agw("agent", "status", "bob-real", config_path=bob_cfg).stdout)
     assert alice_status["state"] == "online", alice_status
     assert bob_status["state"] == "online", bob_status
-    print(f"[test] both online", flush=True)
+    print("[test] both online", flush=True)
 
     # ── 加好友 ──
     print("[test] alice -> friend request bob", flush=True)

@@ -95,7 +95,7 @@ class IPCClient:
                         err = resp["error"]
                         raise RuntimeError(f"[{err.get('code')}] {err.get('message')}")
                     return resp.get("result")
-                except (ConnectionError, OSError, socket.timeout) as e:
+                except (ConnectionError, OSError, socket.timeout):
                     self._reset()
                     if attempts >= 2:
                         raise

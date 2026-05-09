@@ -4,7 +4,6 @@ AgentManager —— 管理本机所有 AgentRunner 的生命周期
 from __future__ import annotations
 
 import asyncio
-import pathlib
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional

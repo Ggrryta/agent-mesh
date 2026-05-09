@@ -14,7 +14,7 @@ import pathlib
 import sqlite3
 import time
 from dataclasses import dataclass, asdict
-from typing import Any, Optional
+from typing import Any
 
 from gas.log import get_logger
 
