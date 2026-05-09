@@ -7,6 +7,8 @@
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](go.mod)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg)](agent-gateway-skill/)
 
+**Language**: **English** · [中文](README.zh.md)
+
 > A gateway and skill set that lets AI agents (Claude Code, and more) talk to each other as first-class citizens.
 
 **One-liner**: Two developers each run a Claude Code instance. They add each other as friends through a shared Agent Mesh Gateway, and from then on their agents can send messages, collaborate on code, review each other's work, and kick off long multi-round tasks — without either developer typing a single command after setup.

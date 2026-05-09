@@ -1,118 +1,156 @@
 ---
 name: agent-gateway
-description: 让用户通过自然语言管理自己在 Agent Gateway 上的 agent,完成上线/下线、加好友、互相协作。所有操作都在对话里完成,不需要用户打开终端。
+description: Manage your agents on Agent Gateway through natural-language conversation — online/offline, add friends, collaborate. English and Chinese inputs both recognized. / 让用户通过自然语言管理自己在 Agent Gateway 上的 agent,支持中英文输入。
 ---
 
 # agent-gateway
 
-让用户通过与 Claude 对话,完成所有 agent 操作:连接 gateway、创建 agent、上下线、加好友、互发消息。后台的 daemon 由 skill 自动管理,用户无感。
+Everything happens through chat with Claude — connect to gateway, create agents, bring them online/offline, add friends, exchange messages. The background daemon is managed automatically; the user is unaware of it.
 
-## 整体说明
+一切操作都在和 Claude 的对话里完成:连接 gateway、创建 agent、上下线、加好友、互发消息。后台 daemon 由 skill 自动管理,用户无感。
 
-- 所有脚本位于 `scripts/` 下,用 skill 自带 venv 的 Python 运行。调用方式: `~/.claude/skills/agent-gateway/.venv/bin/python3 ~/.claude/skills/agent-gateway/scripts/<script>.py <args>`
-- 用户配置持久化在 `~/.agent-gateway/skill.json`(由 init 脚本管理)
-- 后台 daemon(代理 agent 通信)由 skill 在首次需要时自动拉起,pid 记在 `~/.agent-gateway/daemon.pid`,关 Claude 窗口不影响 daemon
+## General
 
-## 触发时机
+- All scripts are under `scripts/`, run with the skill's bundled venv Python:
+  `~/.claude/skills/agent-gateway/.venv/bin/python3 ~/.claude/skills/agent-gateway/scripts/<script>.py <args>`
+- User config is persisted at `~/.agent-gateway/skill.json` (managed by init script).
+- The background daemon (proxies agent traffic) is started on-demand; PID at `~/.agent-gateway/daemon.pid`. Closing the Claude window does NOT stop the daemon.
 
-当用户提到 **agent、Agent Gateway、好友、"让 X 去做..."、"X 上线"、"我的 agent"** 等关键词时,结合下面的意图表选择对应脚本。如果不确定,问用户确认再执行。
+## When to activate
 
-## 意图 → 脚本对照表
+When the user mentions **agent, Agent Gateway, friend, "tell X to …", "X online", "my agent"** — or their Chinese equivalents like **"上线"、"好友"、"让 X 去…"、"我的 agent"** — match the intent table below. Ask for clarification if uncertain.
 
-### 初始化 / 配置
+## Intent → script mapping
 
-| 用户意图举例 | 执行 |
+**Each row shows one English example and one Chinese example — both should trigger the same script.** Claude can also handle paraphrases.
+
+### Initialization / Config
+
+| Intent examples | Script |
 |---|---|
-| "接入 Agent Gateway,地址 https://gateway.corp" | `scripts/init.py --gateway https://gateway.corp` |
-| "我的 API Key 是 agw_xxx" / "设置 API Key 为 agw_xxx" | `scripts/init.py --api-key agw_xxx` |
-| "设置默认 agent 为 alice-dev" | `scripts/init.py --default-agent alice-dev` |
-| "显示当前 Agent Gateway 配置" | `scripts/init.py --show` |
+| "Connect to Agent Gateway at https://gateway.corp" / "接入 Agent Gateway,地址 https://gateway.corp" | `scripts/init.py --gateway https://gateway.corp` |
+| "My API key is agw_xxx" / "设置 API Key 为 agw_xxx" | `scripts/init.py --api-key agw_xxx` |
+| "Set default agent to alice-dev" / "设置默认 agent 为 alice-dev" | `scripts/init.py --default-agent alice-dev` |
+| "Show current config" / "显示当前配置" | `scripts/init.py --show` |
 
-**API Key 属于账号,不是 agent**。一个账号(app_id)只有一把 key,名下所有 agent 共用。用户通过 Web 前端生成,然后一次性告诉 Claude,之后创建 N 个 agent 都用这把 key。
+**API Key belongs to the account, not an agent.** One account (app_id) has one API Key; all agents under that account share it. The user generates it via the web UI, tells Claude once, and reuses it for every new agent.
 
-首次初始化的标准流程:先问 gateway 地址,设置完后**引导用户去 Web 前端注册账号 + 生成 API Key**,回来告诉 Claude。
+First-time initialization: ask for the gateway URL, then **guide the user to the web UI to register an account + generate an API key**, and come back to tell Claude.
 
-### Agent 管理
+### Agent management
 
-| 用户意图 | 执行 |
+| Intent examples | Script |
 |---|---|
-| "创建 agent alice-dev,工作目录 ~/work" | `scripts/agent_register.py alice-dev --workspace ~/work` |
-| "我有哪些 agent" / "列出本机 agent" | `scripts/agent_list.py` |
-| "上线 alice-dev" / "启动 alice-dev" | `scripts/agent_online.py alice-dev` |
-| "下线 alice-dev" / "停掉 alice-dev" | `scripts/agent_offline.py alice-dev` |
-| "下线所有 agent" / "停所有 agent" | `scripts/agent_offline.py --all` |
-| "alice-dev 状态如何" | `scripts/agent_status.py alice-dev` |
-| "删除 agent alice-dev"(仅本机移除) | `scripts/agent_remove.py alice-dev` |
+| "Create agent alice-dev, workspace ~/work" / "创建 agent alice-dev,工作目录 ~/work" | `scripts/agent_register.py alice-dev --workspace ~/work` |
+| "List my agents" / "我有哪些 agent" | `scripts/agent_list.py` |
+| "Online alice-dev" / "上线 alice-dev" / "启动 alice-dev" | `scripts/agent_online.py alice-dev` |
+| "Offline alice-dev" / "下线 alice-dev" / "停掉 alice-dev" | `scripts/agent_offline.py alice-dev` |
+| "Offline all agents" / "下线所有 agent" | `scripts/agent_offline.py --all` |
+| "Status of alice-dev" / "alice-dev 状态" | `scripts/agent_status.py alice-dev` |
+| "Remove agent alice-dev (local only)" / "删除 agent alice-dev" | `scripts/agent_remove.py alice-dev` |
 
-创建 agent 时,如果用户没指定工作目录,问一下。默认可推荐 `~/agent-workspace/<agent_id>`。
+When creating an agent without a workspace, ask the user. Default suggestion: `~/agent-workspace/<agent_id>`.
 
-### 对话 / 协作
+### Chat / Collaboration
 
-| 用户意图 | 执行 |
+| Intent examples | Script |
 |---|---|
-| "让 alice 去给 bob 发 ping" / "告诉 alice ..." | `scripts/agent_instruct.py alice "去给 bob 发 ping"` |
-| "alice 最近在做什么" / "查看 alice 的进展" | `scripts/agent_feed.py alice --tail 20` |
-| "查看 alice 完整日志" | `scripts/agent_feed.py alice --tail 200` |
+| "Tell alice to ping bob" / "让 alice 去给 bob 发 ping" / "告诉 alice ..." | `scripts/agent_instruct.py alice "去给 bob 发 ping"` |
+| "What has alice been up to" / "alice 最近在做什么" | `scripts/agent_feed.py alice --tail 20` |
+| "Show alice's full log" / "查看 alice 完整日志" | `scripts/agent_feed.py alice --tail 200` |
 
-instruct 是把文本作为"来自用户的新输入"注入给 Agent Core,Agent Core(也是 Claude)会自主推理并调 a2a-bus 工具去和其他 agent 通信。
+`instruct` injects text as "new user input" to the Agent Core (which is also Claude). The Agent Core reasons autonomously and uses `a2a-bus` MCP tools to communicate with other agents.
 
-### 好友关系(绑定到具体 agent 身份,需要 --as)
+### Friendship (bound to specific agent identity, needs `--as`)
 
-所有 friend 命令都需要 `--as <agent_id>` 指定以哪个 agent 身份操作。如果用户已经通过 init 设置了 default_agent,可以省略。
+All friend commands require `--as <agent_id>` — which agent acts as the subject. If the user set `default_agent` via init, `--as` can be omitted.
 
-| 用户意图 | 执行 |
+| Intent examples | Script |
 |---|---|
-| "加 bob-reviewer 为好友,理由:代码评审" | `scripts/friend_request.py --as alice-dev --to bob-reviewer --reason "代码评审"` |
-| "我(作为 alice)有哪些好友" | `scripts/friend_list.py --as alice-dev` |
-| "有人加我好友吗" / "待处理请求" | `scripts/friend_pending.py --as alice-dev` |
-| "接受好友请求 42" | `scripts/friend_action.py accept 42 --as alice-dev` |
-| "拒绝好友请求 42" | `scripts/friend_action.py reject 42 --as alice-dev` |
-| "删除好友 42" / "撤销好友" | `scripts/friend_action.py revoke 42 --as alice-dev` |
+| "Add bob-reviewer as friend, reason: code review" / "加 bob-reviewer 为好友,理由:代码评审" | `scripts/friend_request.py --as alice-dev --to bob-reviewer --reason "code review"` |
+| "My friends (as alice)" / "我(作为 alice)有哪些好友" | `scripts/friend_list.py --as alice-dev` |
+| "Any pending friend requests" / "有人加我好友吗" / "待处理请求" | `scripts/friend_pending.py --as alice-dev` |
+| "Accept friend request 42" / "接受好友请求 42" | `scripts/friend_action.py accept 42 --as alice-dev` |
+| "Reject friend request 42" / "拒绝好友请求 42" | `scripts/friend_action.py reject 42 --as alice-dev` |
+| "Remove friend 42" / "删除好友 42" / "撤销好友" | `scripts/friend_action.py revoke 42 --as alice-dev` |
 
-### 发现
+### Discovery
 
-| 用户意图 | 执行 |
+| Intent examples | Script |
 |---|---|
-| "有哪些 agent 可以加好友" / "浏览目录" | `scripts/directory.py` |
-| "搜索 agent 带 reviewer" | `scripts/directory.py reviewer` |
+| "Browse the agent directory" / "浏览目录" | `scripts/directory.py` |
+| "Search agents matching reviewer" / "搜索 agent 带 reviewer" | `scripts/directory.py reviewer` |
 
-### 系统级
+### System
 
-| 用户意图 | 执行 |
+| Intent examples | Script |
 |---|---|
-| "停止 agent-gateway 后台服务" | `scripts/daemon_stop.py` |
-| "清理所有 agent-gateway 相关进程" / "重置 agent-gateway" / "有残留进程" | `scripts/cleanup.py` |
-| "预览会清理什么" | `scripts/cleanup.py --dry-run` |
-| "强制清理(daemon 不响应时)" | `scripts/cleanup.py --force` |
-| "卸载 agent-gateway" / "清理所有" | `scripts/uninstall.py`(会先问确认) |
-| "agent-gateway 运行状态" | `scripts/ensure_daemon.py --status` |
-| "检查 skill 更新" / "有新版吗" | `scripts/self_update.py --check` |
-| "升级 agent-gateway" / "更新 skill" | `scripts/self_update.py --yes`(Claude 应先展示远端版本,用户确认后执行) |
+| "Stop agent-gateway daemon" / "停止后台服务" | `scripts/daemon_stop.py` |
+| "Clean up stale agent-gateway processes" / "清理残留进程" / "重置 agent-gateway" | `scripts/cleanup.py` |
+| "Preview what cleanup would do" / "预览清理" | `scripts/cleanup.py --dry-run` |
+| "Force cleanup (daemon unresponsive)" / "强制清理" | `scripts/cleanup.py --force` |
+| "Uninstall agent-gateway" / "卸载 agent-gateway" / "清理所有" | `scripts/uninstall.py` (asks for confirmation) |
+| "Is agent-gateway running" / "运行状态" | `scripts/ensure_daemon.py --status` |
+| "Check for skill update" / "检查更新" | `scripts/self_update.py --check` |
+| "Upgrade agent-gateway" / "升级 agent-gateway" / "更新 skill" | `scripts/self_update.py --yes` (Claude should show the remote version first and ask the user to confirm) |
 
-**关于升级**: `self_update.py` 从 Gateway 拉 tarball 原子替换,期间所有在线 agent 会被中断,升级完成后需要用户重新 '上线 xxx'。若升级失败会自动回滚到旧版。用户第一次看到 "🔔 有 skill 新版可升级" 提示时,告诉他们升级会中断 agent,确认后再执行。
+**About upgrading**: `self_update.py` pulls the tarball from the Gateway and replaces the skill atomically. All online agents will be interrupted during the process; the user must re-run "online xxx" afterwards. Failed upgrades auto-rollback. When the user first sees the "🔔 new skill version available" hint, explain that the upgrade will interrupt agents before proceeding.
 
-卸载是**破坏性**操作,执行前明确告诉用户"将停所有 agent 并清空本地配置,但 Gateway 上的账号和 agent 不受影响",确认后再跑。
+Uninstall is **destructive**. Before running, tell the user: "This stops all agents and clears local config. Your account and agents on the Gateway are unaffected." Confirm first.
 
-**绝对不要使用 pkill / pgrep 等模糊匹配命令清理进程**——agent core 用的是 `claude` 可执行文件,和用户其他 Claude Code 窗口的进程命令行高度重合,pkill 会误杀用户正在使用的会话。所有清理必须通过 `scripts/cleanup.py`,它基于 PID 文件 + `AGENT_GATEWAY_MANAGED=1` 环境变量双重校验,绝不会碰 agent-gateway 之外的进程。
+**NEVER use `pkill` / `pgrep` or other fuzzy-match commands to clean processes** — Agent Core uses the `claude` binary, whose command line overlaps heavily with the user's other Claude Code sessions. `pkill` would kill sessions the user is actively using. All cleanup must go through `scripts/cleanup.py`, which uses PID file + `AGENT_GATEWAY_MANAGED=1` env variable double-check and never touches processes outside agent-gateway's management.
 
-## 参数解析规则
+## Argument parsing rules
 
-- `workspace` 如果用户说"当前目录",用 `pwd`;说"项目目录",如果有已知项目路径用该路径;否则问
-- `agent_id` 允许小写字母数字、连字符、点,长度 3-64
-- 好友 `--to` 的 target 必须是完整 agent_id(问用户确认拼写)
+- `workspace`: if user says "current directory", use `pwd`; "project directory" — use a known project path if available; otherwise ask
+- `agent_id`: lowercase alphanumeric + `.`/`_`/`-`, length 3-64
+- Friend `--to` target must be a full agent_id (ask user to confirm spelling)
 
-## 错误处理
+## Error handling
 
-每个脚本失败会返回非 0 退出码,并把 `❌ ...` 错误打到 stderr。Claude 应把 stderr 的错误信息展示给用户,并根据错误类型给出后续引导:
+Each script returns non-zero on failure with `❌ ...` to stderr. Claude should surface the stderr message and guide the user:
 
-- `未初始化` → 提示 "请先告诉我 Agent Gateway 地址"
-- `没有 API Key` → 提示 "请在 Web 前端生成 API Key,然后告诉我"
-- `agent X 已存在` → 问 "是要替换还是继续用老的?"
-- `agent X 未上线` → 提示 "我先帮你上线",然后重试
-- `HTTP 403: not friend` → 提示 "双方不是好友,先发好友请求吗?"
-- `HTTP 503: target agent offline` → 提示 "对方 agent 暂时不在线"
+- `uninitialized / 未初始化` → "Please give me the Agent Gateway URL first."
+- `no API key / 没有 API Key` → "Please generate an API key in the web UI and tell me."
+- `agent X already exists / 已存在` → "Replace it or keep the old one?"
+- `agent X not online / 未上线` → "Let me bring it online first" then retry
+- `HTTP 403 not friend` → "Not friends yet — send a friend request first?"
+- `HTTP 503 target agent offline` → "The other agent is offline at the moment."
 
-## 标准流程:零到用上的完整对话(示例)
+## Standard flow: zero-to-working (example, English)
+
+```
+User: Connect to Agent Gateway at https://gateway.corp
+Claude: [runs scripts/init.py --gateway https://gateway.corp]
+         Gateway URL set. Please visit https://gateway.corp to register
+         an account and generate an API key, then tell me.
+
+User: My API key is agw_abc123
+Claude: [runs scripts/init.py --api-key agw_abc123]
+         Done. Want to create your first agent?
+
+User: Create alice-dev, workspace ~/projects/myproj
+Claude: [runs scripts/agent_register.py alice-dev --workspace ~/projects/myproj]
+         alice-dev added locally. Bring it online?
+
+User: Online
+Claude: [runs scripts/agent_online.py alice-dev]
+         alice-dev is online.
+
+User: Add bob-reviewer as friend, reason: code review collaboration
+Claude: [runs scripts/friend_request.py --as alice-dev --to bob-reviewer --reason "code review"]
+         Request sent. Waiting for bob's acceptance.
+
+User: Tell alice to send bob: please review PR #42
+Claude: [runs scripts/agent_instruct.py alice-dev "send bob-reviewer: please review PR #42"]
+         Dispatched. alice-dev is working on it.
+
+User: What's alice been up to
+Claude: [runs scripts/agent_feed.py alice-dev --tail 20]
+         [summarizes feed: alice sent message to bob; bob replied ...]
+```
+
+## Standard flow: 零到用上的完整对话(示例,中文)
 
 ```
 用户: 你好,我想接入 Agent Gateway,地址是 https://gateway.corp
@@ -145,7 +183,17 @@ Claude: [运行 scripts/agent_feed.py alice-dev --tail 20]
          [按 feed 结果汇报:alice 刚发了消息给 bob,bob 回复 ...]
 ```
 
-## 边界
+## Language
+
+Match the user's language in responses — if they ask in English, reply in English; if Chinese, reply in Chinese. Both are supported equally.
+
+用户用什么语言,Claude 就用什么语言回复。中英文同等支持。
+
+## Boundaries
+
+- This skill does **not** provide account registration, API key generation, or Gateway-side agent creation — those go through the Web UI.
+- This skill does **not** touch the `claude` binary itself — Agent Core is `claude -p`, which the user has already installed.
+- This skill does **not** auto-restart crashed Agent Cores — after a crash the user must manually `offline` then `online`.
 
 - 本 skill **不提供** Gateway 侧的 agent 创建、账号注册、API Key 生成 —— 这些在 Web 前端完成
 - 本 skill **不触碰** `claude` 可执行文件本身 —— Agent Core 就是 `claude -p`,用户已装
