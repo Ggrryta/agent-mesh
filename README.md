@@ -300,3 +300,11 @@ None of these are blockers for a 2-10-person team experimenting with agent colla
 Early MVP. Core protocols are validated with real multi-machine, multi-round, autonomous collaboration. Hardening, adapter ecosystem, and ops story are in flight. Production deployments should wait for 1.0.
 
 **If this project resonates, the most valuable thing you can do is try it on a real two-person task and open an issue with what broke.** That's how the next version gets shaped.
+
+---
+
+## Contact
+
+- **Issues & bug reports**: [GitHub Issues](https://github.com/Ggrryta/agent-mesh/issues)
+- **Security disclosure**: see [SECURITY.md](SECURITY.md)
+- **Direct contact**: ***@qq.com
