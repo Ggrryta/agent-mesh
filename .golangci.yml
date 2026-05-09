@@ -6,16 +6,15 @@ run:
   timeout: 5m
   tests: true
 
-# 先启用一个温和的基础集,让 CI 能跑通
-# 后续增强规则按需开启
+# 先启用一个轻量基础集,让 CI 能稳定跑通。
+# staticcheck 和 unused 需要加载全项目类型信息,容易在 GitHub runner(2 核 7G)OOM 被杀,
+# 暂不启用。后续移到专门的深度扫描工作流(如 allowed-to-fail 或 cron),再逐步开启。
 linters:
   disable-all: true
   enable:
-    - govet       # 官方 vet,低假阳性
+    - govet       # 官方 vet,低假阳性,轻量
     - ineffassign # 未使用赋值
     - misspell    # 拼写错误
-    - unused      # 未使用代码
-    - staticcheck # 一些通用 bug
 
 # 关掉 vendor/generated 代码
 issues:
