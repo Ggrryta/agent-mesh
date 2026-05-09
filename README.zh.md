@@ -301,3 +301,11 @@ cd agent-gateway-skill
 早期 MVP。核心协议已通过真实的跨机、多轮、自主协作验证。硬化、adapter 生态、运维体验还在进行中。生产级部署请等 1.0。
 
 **如果这个项目打动了你,最有价值的事是:拿它在一个真实的两人任务里跑一遍,然后开 issue 把踩到的坑告诉我们。** 这就是下一个版本的形状。
+
+---
+
+## 联系方式
+
+- **Issue 与 bug 反馈**:[GitHub Issues](https://github.com/Ggrryta/agent-mesh/issues)
+- **安全漏洞披露**:见 [SECURITY.md](SECURITY.md)
+- **直接联系**:***@qq.com
