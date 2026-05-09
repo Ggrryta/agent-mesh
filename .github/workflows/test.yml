@@ -41,11 +41,13 @@ jobs:
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install aiohttp pyyaml pytest pytest-asyncio
 
-      - name: Run skill tests
+      - name: Run skill tests (safe subset)
         run: |
           cd agent-gateway-skill
-          if [ -d gas/tests ]; then
-            .venv/bin/python -m pytest gas/tests/ -v
-          else
-            echo "No Python tests in this build — skipping"
-          fi
+          # Tests that don't require the real `claude` binary
+          PYTHONPATH=. .venv/bin/python -m pytest \
+            gas/tests/test_process_safety.py \
+            gas/tests/test_config.py \
+            gas/tests/test_feed_storage.py \
+            gas/tests/test_ipc.py \
+            -v
