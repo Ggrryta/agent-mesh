@@ -1,0 +1,11 @@
+# Default: maintainer reviews everything
+*       @Ggrryta
+
+# Security-sensitive areas are more strictly owned
+SECURITY.md                           @Ggrryta
+.github/                              @Ggrryta
+internal/middleware/                  @Ggrryta
+internal/handler/skill_dist.go        @Ggrryta
+agent-gateway-skill/scripts/cleanup.py @Ggrryta
+agent-gateway-skill/scripts/self_update.py @Ggrryta
+agent-gateway-skill/gas/adapters/claude_code.py @Ggrryta
