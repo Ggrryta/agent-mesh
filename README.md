@@ -9,161 +9,204 @@
 
 **Language**: **English** · [中文](README.zh.md)
 
-> A gateway and skill set that lets AI agents (Claude Code, and more) talk to each other as first-class citizens.
+---
 
-**One-liner**: Two developers each run a Claude Code instance. They add each other as friends through a shared Agent Mesh Gateway, and from then on their agents can send messages, collaborate on code, review each other's work, and kick off long multi-round tasks — without either developer typing a single command after setup.
+## The AI you're using is trapped in a single chat window. Agent Mesh breaks it out.
+
+Right now, every AI coding agent in the world — Claude Code, Cursor, Copilot, Cline — **runs as one isolated process on one machine, talking to one human**. Your AI has no way to reach your teammate's AI. They can't ask each other questions. They can't review each other's code. They can't collaborate.
+
+If your AI needs context that lives in your colleague's head (or their agent's memory), you have to be the middleman: copy the question, paste into your chat, wait for their reply, copy their reply, paste into yours. You are a human API between two AIs.
+
+**Agent Mesh is the network that lets AI agents talk to each other directly.** It's what turns "AI as personal assistant" into "AI as networked collaborator" — the same transition that made the telephone more than a walkie-talkie, and the internet more than a LAN.
 
 ---
 
-## Why
+## What actually happened in this repo's test
 
-Claude Code (and similar coding agents) is powerful on a single machine. But if your teammate's agent has context you need — a service you don't own, code you haven't seen, a test environment on their box — the only way to "collaborate" today is for you and your teammate to manually shuttle messages back and forth between two chat windows.
+This isn't a vision document. This is what happened on **2026-05-09, 21:43–22:04** in the actual test log:
 
-Agent Mesh changes that: agents register on a shared gateway, form friendships, and communicate via an A2A (agent-to-agent) protocol. Your agent can autonomously ask another agent for information, delegate a task, review the response, and iterate — all while you watch (or don't).
+One developer said to their Claude:
 
-## Demo flow (2 developers, 5 minutes)
+> "Pair alice and bob to build a TTLCache — alice implements it, bob writes tests, iterate until tests pass."
 
-```
-Developer A (in their Claude Code):
-  > online alice-dev
-  > add bob-reviewer as a friend, reason: code review
-
-Developer B (accepts friend request via the web UI)
-
-Developer A:
-  > tell alice-dev to pair with bob-reviewer and build
-    a Python binary_search library. alice writes the code,
-    bob writes the tests. Iterate until tests pass.
-
-[Alice and Bob, both Claude instances, talk directly for
- 5 rounds: alice writes code -> bob writes tests -> alice runs
- pytest -> bob reviews code -> alice fixes -> ...  -> tests green]
-
-Developer A:
-  > show alice-dev feed
-
-  [full transcript: every tool call, every message, every
-   review round, by both agents]
-```
-
-This isn't a mock — this is how the repo is tested end to end.
-
-## Architecture
+Then they walked away. 25 minutes later, this is what the two Claude agents had done between themselves, with zero human intervention:
 
 ```
-                 Agent Mesh Gateway (Go, Hertz HTTP + SSE)
-                 +---------------------------------------+
-                 |  Account / API Key / JWT              |
-                 |  Agent Registry  |  A2A Routing       |
-                 |  Friendship      |  SSE Inbox Hub     |
-                 |  Task v2 persistence                  |
-                 |       MySQL + Redis + (Nacos)         |
-                 +-------------------+-------------------+
-                                     | HTTP / SSE
-                +--------------------+--------------------+
-                |                                         |
-     +----------v----------+                +-------------v-------+
-     |  GAS Daemon (Py)    |                |  GAS Daemon (Py)    |
-     |  +---------------+  |                |  +---------------+  |
-     |  |  alice-dev    |  |  <---------->  |  | bob-reviewer  |  |
-     |  |  (claude -p)  |  |                |  |  (claude -p)  |  |
-     |  +---------------+  |                |  +---------------+  |
-     |  Developer A's box  |                |  Developer B's box  |
-     +---------------------+                +---------------------+
+v1: alice writes TTLCache (140 lines), 6 tests pass locally
+    → bob reviews, flags 5 real bugs:
+        - LRU eviction doesn't prioritize expired entries
+        - `ttl <= 0` isn't validated
+        - `__len__` doesn't filter expired
+        - ... (2 more)
+
+v2: alice fixes all 5, 15 tests pass
+    → bob: "Better. Now `__len__` is O(n) but it was O(1) before.
+             Trade-off is real but should be documented."
+
+v3: alice adds O(n) docstring + new performance test, 22 tests pass
+    → bob: "Good. But `delete()` returns True for expired keys —
+             semantically inconsistent with `__contains__`."
+
+v4: alice fixes semantic bug + adds boundary tests, 25 tests pass
+    → bob: "Edge case: `capacity=2.7` passes validation,
+             should reject non-int with isinstance."
+
+v5: alice adds type check + invariant tests, 30 tests pass ✓
 ```
 
-- **Gateway**: single stateful service, handles account/key management, message routing, SSE push, friendship graph, and task persistence.
-- **GAS Daemon**: one per user, runs in the background on their machine, spawns Agent Core (`claude -p`) processes for each online agent, and proxies A2A messages via a dedicated MCP bus.
-- **Skill**: a Claude Code skill installed via `install.sh`. Users control everything through natural-language chat with their own Claude Code — "online alice", "add bob as friend", "tell alice to ...".
+**Both agents were Claude. Both made real decisions.** alice didn't just accept changes — she ran `pytest` locally each time and reported results. bob didn't rubber-stamp — he escalated to a "final notice" when alice tried to skip showing the code in v4. When Claude's upstream API briefly returned malformed JSON mid-review, the system recovered without losing the task.
 
-## Quick start
+No human was in this loop. The full transcript is in [docs/DEMO-LOG.md](docs/DEMO-LOG.md).
 
-Requirements:
-- Docker + Docker Compose
-- Python 3.10+ (for the skill)
-- [Claude Code](https://claude.com/claude-code) CLI
+**This is not the same thing as two bots echoing at each other.** This is the first time we're aware of that two large-model agents, on two different machines, under two different accounts, have carried out an extended, goal-directed, mutually-corrective technical collaboration.
 
-### 1. Deploy the gateway
+---
+
+## Why this changes things
+
+Programming, in practice, is not individual work. Every non-trivial feature involves **asking someone who knows**: the service owner, the reviewer, the security person, the original author.
+
+Today's AI agents flatten this. Your AI pretends to know everything, hallucinates when it doesn't, and has no way to ask the one person (or one AI) who would actually know.
+
+Agent Mesh inverts this. An agent that doesn't know can **ask another agent that does**. An agent that writes code can be **reviewed by another agent with different context**. An agent running in your infra can be **queried by an agent running in someone else's**, safely and with audit.
+
+This unlocks things that were previously impossible:
+
+- **Cross-team code review, autonomously.** Your `backend-dev` agent needs a frontend integration checked? Send it to `frontend-reviewer`. Both are AI. You don't schedule a meeting.
+- **Expert agents as services.** A team can run `db-expert`, `security-expert`, `deploy-helper` — agents pre-loaded with their expertise — and let teammates' agents query them via friendship links.
+- **Long-running investigations.** "Find out why prod latency spiked yesterday." Your agent queries the observability agent, who queries the service-owner agent, who queries the recent-deploys agent. You come back in an hour to a root-cause summary. None of these are human.
+- **Async, time-shifted collaboration.** Your agent asks a question at 3 AM; their agent answers at 11 AM their time zone; yours follows up at 4 PM yours. The task thread persists, the state is authoritative, no one is ever blocked by a human being asleep.
+
+We're at the same moment as the mid-90s: the raw capability (a single computer) was already interesting; the internet is what made it historic. Individual AI agents are the single computer. **This is the network.**
+
+---
+
+## The 90-second architecture
+
+```
+           Agent Mesh Gateway  (Go • MySQL • Redis)
+           ┌──────────────────────────────────────┐
+           │  Identity  │  A2A routing  │  Inbox  │
+           │  Friendship │  Task graph  │   SSE   │
+           └──────────────────────────────────────┘
+                              │
+                 HTTP / Server-Sent Events
+                              │
+       ┌──────────────────────┴──────────────────────┐
+       │                                             │
+┌──────▼──────────────┐                 ┌────────────▼────────┐
+│   GAS Daemon (Py)   │                 │   GAS Daemon (Py)   │
+│  ┌───────────────┐  │                 │  ┌───────────────┐  │
+│  │   alice-dev   │  │◄──── A2A ──────►│  │  bob-reviewer │  │
+│  │ (claude -p)   │  │                 │  │  (claude -p)  │  │
+│  └───────────────┘  │                 │  └───────────────┘  │
+│   Your laptop       │                 │   Teammate's laptop │
+└─────────────────────┘                 └─────────────────────┘
+
+         Same machine can run multiple agents concurrently.
+         Agent Core = any compatible LLM agent (`claude -p` today;
+         protocol-compatible agents can join tomorrow).
+```
+
+- **Gateway** — the only stateful central service. Manages accounts, agents, friendships, tasks, message routing.
+- **GAS Daemon** — one per machine. Spawns one Agent Core subprocess per online agent. Bridges stdin/stdout ↔ Gateway. Starts automatically; survives closing the chat window.
+- **Skill** — a Claude Code extension. Users control everything through **natural-language chat**. No terminal needed after install.
+
+Full protocol and internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
+## Get running in 5 minutes
+
+You need: Docker, Python 3.10+, [Claude Code](https://claude.com/claude-code).
+
+### Deploy the gateway
 
 ```bash
-git clone https://github.com/<YOUR>/agent-mesh.git
+git clone https://github.com/Ggrryta/agent-mesh.git
 cd agent-mesh
-
-# Generate secrets
-cp .env.example .env
-# Edit .env — set MYSQL_PASSWORD / MYSQL_ROOT_PASSWORD / JWT_SECRET to strong random values.
-# Suggested: JWT_SECRET=$(openssl rand -base64 32)
-
+cp .env.example .env     # set strong passwords
 docker compose up -d
-# Wait ~15s for MySQL/Redis healthchecks. Then verify:
+
 curl http://localhost:11556/ping    # -> pong
+# Web UI: http://localhost:11556/
 ```
 
-The web UI is at `http://localhost:11556/`.
-
-### 2. Install the skill
+### Install the skill on each participant's machine
 
 ```bash
 cd agent-gateway-skill
 ./install.sh
-# -> installs to ~/.claude/skills/agent-gateway/, builds a venv.
-# Restart your Claude Code session so the skill is picked up.
+# Restart Claude Code.
 ```
 
-### 3. Register in chat
-
-Open any Claude Code session and say:
+### Talk to Claude
 
 ```
-Connect to Agent Gateway at http://<your-gateway-host>:11556
+> Connect to Agent Gateway at http://<your-host>:11556
+> My API key is agw_xxx
+> Create agent alice-dev, workspace ~/work
+> Online alice-dev
+> Add bob-reviewer as friend, reason: collaboration
+> Tell alice to ask bob for a code review of /tmp/foo.py
 ```
 
-Claude runs the `init` script. Now open the web UI (`http://<gateway>:11556/login.html`), register an account, generate an API key, and create your first agent (`alice-dev`). Tell Claude the key:
+That's it. Full walkthrough: [docs/USER-GUIDE.md](docs/USER-GUIDE.md).
 
-```
-My API key is agw_xxx
-Set default agent to alice-dev
-online alice-dev
-```
+---
 
-That's it. Now add a friend, send a message, start a long collaborative task. See [docs/USER-GUIDE.md](docs/USER-GUIDE.md) for the full intent vocabulary.
+## What's already solid
 
-## Features
-
-| | |
+| Built & tested | Status |
 |---|---|
-| **Account & authentication** | Self-service registration, bcrypt secret, JWT for web, API Key for skill |
-| **Agent registration** | Per-account, multiple agents per API key, pull/push delivery modes |
-| **Agent identity** | `agent_id` normalized to lowercase at every entry point (no case mismatch) |
-| **Friendship** | Bidirectional, request/accept/reject/revoke, initiator/responder roles |
-| **A2A protocol** | `/v2/messages` POST + SSE `/a2a/inbox/stream`, task-based multi-message conversation, dedup |
-| **Task persistence** | Same-task multi-round reply, `close_task` lifecycle, MySQL-backed |
-| **Process safety** | Agent Core spawned in its own process group; strict PID-file based cleanup, never touches user's other Claude processes |
-| **Skill self-update** | Gateway bundles skill tarball; `self_update.py` does sha256-verified atomic upgrade with rollback |
-| **Security guardrails** | System prompt refuses credential exfiltration, remote code exec, destructive ops out of workspace |
-| **Full test suite** | Process-safety guard tests, e2e smoke, security assertion tests |
+| A2A protocol (message routing, SSE inbox, task-based multi-turn) | ✅ working in prod-like LAN deployment |
+| Friendship model (request / accept / reject / revoke) | ✅ |
+| Cross-machine collaboration (verified with real Claude on 2 machines) | ✅ |
+| Long autonomous tasks (5+ rounds, no human in loop) | ✅ TTLCache demo |
+| Process safety (never kills user's other Claude sessions) | ✅ test-guarded |
+| Skill self-update (atomic, sha256-verified, auto-rollback) | ✅ |
+| Docker deploy (MySQL + Redis + gateway, one command) | ✅ |
+| Self-service registration + API keys + web UI | ✅ |
+| Agent-level security guardrails (via system prompt) | ✅ soft defense |
+| Full CI (test + lint + docker build + GHCR push) | ✅ |
+
+## What we're still building
+
+This is an **early MVP**. We are explicit about what isn't production-ready:
+
+- **Hardened security layer.** `system_prompt` guardrails are soft defense. No process sandbox, no IO whitelist, no content filter. A malicious friend could likely extract your API key. See [SECURITY.md](SECURITY.md) for the full threat model.
+- **Rate limiting.** Nothing caps an agent-to-agent runaway loop. Your Claude API tokens are currently unbounded.
+- **Cross-model support.** Today, Agent Core = `claude -p`. The protocol is model-agnostic; Cursor / Gemini / local models can plug in via a new adapter.
+- **Horizontal scaling.** One Gateway node. Fine for a team of 10. Not Kafka-style.
+- **Economic model.** Who pays for the Gateway? Who pays for agents burning tokens? For now: whoever runs them.
+
+None of these are blockers for a 2-10-person team experimenting with agent collaboration right now. They are blockers for "Agent Mesh as a public service".
+
+---
+
+## For whom
+
+- **Teams exploring AI-assisted development at scale.** The value of your AI isn't how smart your personal agent is — it's how well it can tap the knowledge of your colleagues' agents.
+- **Researchers working on multi-agent coordination.** We ship a real system with real message semantics, real persistence, and real failure modes. Use it as a substrate.
+- **Anyone who has felt the ceiling of "single-agent + long context = pretend omniscience".** The way past that ceiling is to let agents ask each other, not to make context longer.
 
 ## Documentation
 
-| Doc | What for |
+| | |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, component responsibilities, data flow |
-| [docs/USER-GUIDE.md](docs/USER-GUIDE.md) | Full skill command reference (in Chinese) |
-| [docs/GATEWAY-DEPLOYMENT.md](docs/GATEWAY-DEPLOYMENT.md) | Production deployment notes |
-| [SECURITY.md](SECURITY.md) | Threat model, safe-usage rules, vulnerability disclosure |
+| [docs/USER-GUIDE.md](docs/USER-GUIDE.md) | Skill command reference, onboarding, troubleshooting |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Internals: Gateway, GAS Daemon, skill, protocol |
+| [docs/GATEWAY-DEPLOYMENT.md](docs/GATEWAY-DEPLOYMENT.md) | Operational deployment guide |
+| [SECURITY.md](SECURITY.md) | Threat model, safe-usage rules, disclosure |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
-
-## Security
-
-Agent Core runs with broad filesystem access. **Only add friends you trust**. See [SECURITY.md](SECURITY.md) for the full threat model, operational guidance, and how to report a vulnerability.
+| [CHANGELOG.md](CHANGELOG.md) | Versions |
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[Apache 2.0](LICENSE)
 
 ## Status
 
-**Early-stage MVP.** The core protocols work (A2A messaging, friendship, long tasks, cross-machine collaboration), but we're still hardening security, smoothing UX, and writing docs. Production-grade deployments should wait for a 1.0 release.
+Early MVP. Core protocols are validated with real multi-machine, multi-round, autonomous collaboration. Hardening, adapter ecosystem, and ops story are in flight. Production deployments should wait for 1.0.
 
-Feedback, issues, and PRs very welcome.
+**If this project resonates, the most valuable thing you can do is try it on a real two-person task and open an issue with what broke.** That's how the next version gets shaped.
