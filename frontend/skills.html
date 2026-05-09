@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill 管理 — Agent Gateway</title>
+  <script src="common.js"></script>
+  <style id="common-style"></style>
+  <style>
+    .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .toolbar input { max-width: 260px; }
+    .create-form { display: none; }
+    .create-form.open { display: block; }
+    .vis-badge-0 { background:#d4edda;color:#155724; }
+    .vis-badge-1 { background:#fff3cd;color:#856404; }
+    .status-active   { background:#d4edda;color:#155724; }
+    .status-disabled { background:#e2e3e5;color:#383d41; }
+    .actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .detail-grid { display:grid; grid-template-columns:140px 1fr; gap:6px 12px; font-size:13px; }
+    .detail-grid .lbl { color:#888; font-weight:500; }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>⚡ Skill 管理</h1>
+
+  <div class="card">
+    <div class="toolbar">
+      <input id="search-input" placeholder="搜索 skill_id / 名称..." oninput="filterSkills()" />
+      <select id="vis-filter" onchange="filterSkills()" style="max-width:140px">
+        <option value="">全部可见性</option>
+        <option value="0">公开</option>
+        <option value="1">私有</option>
+      </select>
+      <button class="btn btn-primary" onclick="toggleCreateForm()">＋ 注册 Skill</button>
+      <button class="btn btn-outline btn-sm" onclick="loadSkills()">刷新</button>
+    </div>
+
+    <!-- 创建表单 -->
+    <div class="create-form card" id="create-form" style="background:#f8f9fa;box-shadow:none;border:1px solid #e0e0e0">
+      <h3>注册新 Skill</h3>
+      <div class="form-grid">
+        <div class="form-row">
+          <label>Skill ID <span style="color:#e74c3c">*</span></label>
+          <input id="f-skill-id" placeholder="team.service.action" />
+        </div>
+        <div class="form-row">
+          <label>名称 <span style="color:#e74c3c">*</span></label>
+          <input id="f-name" placeholder="Skill 显示名称" />
+        </div>
+        <div class="form-row">
+          <label>执行类型 <span style="color:#e74c3c">*</span></label>
+          <select id="f-exec-type" onchange="onExecTypeChange()">
+            <option value="1">HTTP</option>
+            <option value="2">gRPC</option>
+            <option value="3">Local</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>调用类型 <span style="color:#e74c3c">*</span></label>
+          <select id="f-call-type">
+            <option value="1">同步 Sync</option>
+            <option value="2">流式 Stream</option>
+            <option value="3">异步 Async</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Endpoint <span style="color:#e74c3c">*</span></label>
+          <input id="f-endpoint" placeholder="http://service/api/method" />
+        </div>
+        <div class="form-row" id="f-http-method-row">
+          <label>HTTP Method</label>
+          <select id="f-http-method">
+            <option value="POST">POST</option>
+            <option value="GET">GET</option>
+            <option value="PUT">PUT</option>
+          </select>
+        </div>
+        <div class="form-row" id="f-grpc-row" style="display:none">
+          <label>gRPC Method</label>
+          <input id="f-grpc-method" placeholder="/package.Service/Method" />
+        </div>
+        <div class="form-row" id="f-callback-row" style="display:none">
+          <label>Callback URL</label>
+          <input id="f-callback" placeholder="http://action-builder:9000/callback" />
+        </div>
+        <div class="form-row">
+          <label>可见性</label>
+          <select id="f-visibility">
+            <option value="0">公开（任何人可调用）</option>
+            <option value="1">私有（需申请授权）</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>描述</label>
+          <input id="f-desc" placeholder="可选" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Input Schema（JSON Schema）</label>
+        <textarea id="f-input-schema" rows="4" placeholder='{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}'></textarea>
+      </div>
+      <div class="form-row">
+        <label>Output Schema（JSON Schema）</label>
+        <textarea id="f-output-schema" rows="3" placeholder='{"type":"object","properties":{"result":{"type":"string"}}}'></textarea>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-primary" onclick="doCreate()">提交注册</button>
+        <button class="btn btn-outline" onclick="toggleCreateForm()">取消</button>
+      </div>
+      <div id="create-msg" style="margin-top:10px"></div>
+    </div>
+
+    <div id="skills-table">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 详情 Modal -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal">
+    <h3 id="modal-title">Skill 详情</h3>
+    <div id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑 Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3>编辑 Skill</h3>
+    <div id="edit-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeEditModal()">取消</button>
+      <button class="btn btn-primary" onclick="doUpdate()">保存</button>
+    </div>
+    <div id="edit-msg" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS
+  document.getElementById('nav-placeholder').innerHTML = renderNav('skills.html')
+
+  let allSkills = []
+  let editingSkillID = ''
+
+  async function loadSkills() {
+    document.getElementById('skills-table').innerHTML = '<div class="loading">加载中...</div>'
+    const { ok, data } = await apiFetch('/skills')
+    if (!ok || data.code !== 0) {
+      document.getElementById('skills-table').innerHTML = '<div class="alert alert-error">加载失败：' + (data.message || '') + '</div>'
+      return
+    }
+    allSkills = data.data.items || []
+    renderTable(allSkills)
+  }
+
+  function filterSkills() {
+    const q   = document.getElementById('search-input').value.toLowerCase()
+    const vis = document.getElementById('vis-filter').value
+    const filtered = allSkills.filter(s => {
+      const matchQ   = !q || s.skill_id.toLowerCase().includes(q) || (s.name || '').toLowerCase().includes(q)
+      const matchVis = vis === '' || String(s.visibility) === vis
+      return matchQ && matchVis
+    })
+    renderTable(filtered)
+  }
+
+  function renderTable(skills) {
+    if (!skills.length) {
+      document.getElementById('skills-table').innerHTML = '<div class="empty">暂无 Skill，点击「注册 Skill」添加</div>'
+      return
+    }
+    const myAppID = getAppID()
+    const rows = skills.map(s => {
+      const isOwner = s.owner_app_id === myAppID
+      const visBadge = s.visibility === 0
+        ? '<span class="badge vis-badge-0">公开</span>'
+        : '<span class="badge vis-badge-1">私有</span>'
+      const statusBadge = s.status === 'active'
+        ? '<span class="badge status-active">active</span>'
+        : '<span class="badge status-disabled">' + (s.status || 'unknown') + '</span>'
+      const execMap = { 1: 'HTTP', 2: 'gRPC', 3: 'Local', 4: 'Builtin' }
+      const callMap = { 1: 'Sync', 2: 'Stream', 3: 'Async' }
+      const actions = isOwner
+        ? `<button class="btn btn-outline btn-sm" onclick="showDetail('${s.skill_id}')">详情</button>
+           <button class="btn btn-outline btn-sm" onclick="showEdit('${s.skill_id}')">编辑</button>
+           <button class="btn btn-danger btn-sm" onclick="doDelete('${s.skill_id}')">删除</button>`
+        : `<button class="btn btn-outline btn-sm" onclick="showDetail('${s.skill_id}')">详情</button>
+           <button class="btn btn-primary btn-sm" onclick="doApply('${s.skill_id}')">申请权限</button>`
+      return `<tr>
+        <td style="font-family:monospace;font-size:12px">${s.skill_id}</td>
+        <td>${s.name || '—'}</td>
+        <td>${execMap[s.execution_type] || s.execution_type}</td>
+        <td>${callMap[s.call_type] || s.call_type}</td>
+        <td>${visBadge}</td>
+        <td>${statusBadge}</td>
+        <td style="font-size:12px;color:#888">${s.owner_app_id || '—'}</td>
+        <td><div class="actions">${actions}</div></td>
+      </tr>`
+    }).join('')
+    document.getElementById('skills-table').innerHTML = `
+      <table>
+        <thead><tr><th>Skill ID</th><th>名称</th><th>执行类型</th><th>调用类型</th><th>可见性</th><th>状态</th><th>Owner</th><th>操作</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`
+  }
+
+  function toggleCreateForm() {
+    const f = document.getElementById('create-form')
+    f.classList.toggle('open')
+  }
+
+  function onExecTypeChange() {
+    const v = document.getElementById('f-exec-type').value
+    document.getElementById('f-http-method-row').style.display = v === '2' ? 'none' : ''
+    document.getElementById('f-grpc-row').style.display = v === '2' ? '' : 'none'
+    document.getElementById('f-callback-row').style.display = v === '3' ? '' : 'none'
+  }
+
+  async function doCreate() {
+    const msg = document.getElementById('create-msg')
+    
+    // 检查是否登录
+    const token = getToken()
+    if (!token) {
+      msg.innerHTML = '<div class="alert alert-error">❌ 请先登录！<a href="auth.html">去登录 →</a></div>'
+      toast('请先登录', 'error')
+      return
+    }
+    
+    let inputSchema, outputSchema
+    try { inputSchema = JSON.parse(document.getElementById('f-input-schema').value || '{}') } catch { msg.innerHTML = '<div class="alert alert-error">Input Schema 不是合法 JSON</div>'; return }
+    try { outputSchema = JSON.parse(document.getElementById('f-output-schema').value || '{}') } catch { msg.innerHTML = '<div class="alert alert-error">Output Schema 不是合法 JSON</div>'; return }
+
+    const body = {
+      skill_id: document.getElementById('f-skill-id').value.trim(),
+      name: document.getElementById('f-name').value.trim(),
+      description: document.getElementById('f-desc').value.trim(),
+      execution_type: parseInt(document.getElementById('f-exec-type').value),
+      call_type: parseInt(document.getElementById('f-call-type').value),
+      endpoint: document.getElementById('f-endpoint').value.trim(),
+      http_method: document.getElementById('f-http-method').value,
+      visibility: parseInt(document.getElementById('f-visibility').value),
+      input_schema: inputSchema,
+      output_schema: outputSchema,
+    }
+    const grpc = document.getElementById('f-grpc-method').value.trim()
+    if (grpc) body.grpc_method = grpc
+    const cb = document.getElementById('f-callback').value.trim()
+    if (cb) body.callback_url = cb
+
+    msg.innerHTML = '<div class="alert alert-info">提交中...</div>'
+    const { ok, status, data } = await apiFetch('/skills', { method: 'POST', body: JSON.stringify(body) })
+    
+    if (status === 401) {
+      msg.innerHTML = '<div class="alert alert-error">❌ 登录已过期，请重新登录 <a href="auth.html">去登录 →</a></div>'
+      toast('登录已过期', 'error')
+      return
+    }
+    
+    if (ok && data.code === 0) {
+      msg.innerHTML = '<div class="alert alert-success">✅ 注册成功</div>'
+      toast('Skill 注册成功', 'success')
+      loadSkills()
+      setTimeout(() => { document.getElementById('create-form').classList.remove('open'); msg.innerHTML = '' }, 1500)
+    } else {
+      // 显示详细错误信息
+      const errorMsg = data.message || `请求失败 (HTTP ${status})`
+      msg.innerHTML = `<div class="alert alert-error">❌ ${errorMsg}</div>`
+      toast('注册失败', 'error')
+      console.error('Skill 注册失败:', { status, data, body })
+    }
+  }
+
+  function showDetail(skillID) {
+    const s = allSkills.find(x => x.skill_id === skillID)
+    if (!s) return
+    const execMap = { 1: 'HTTP', 2: 'gRPC', 3: 'Local', 4: 'Builtin' }
+    const callMap = { 1: 'Sync', 2: 'Stream', 3: 'Async' }
+    document.getElementById('modal-title').textContent = s.name || s.skill_id
+    document.getElementById('modal-body').innerHTML = `
+      <div class="detail-grid">
+        <span class="lbl">Skill ID</span><span style="font-family:monospace;font-size:12px">${s.skill_id}</span>
+        <span class="lbl">描述</span><span>${s.description || '—'}</span>
+        <span class="lbl">执行类型</span><span>${execMap[s.execution_type] || s.execution_type}</span>
+        <span class="lbl">调用类型</span><span>${callMap[s.call_type] || s.call_type}</span>
+        <span class="lbl">Endpoint</span><span style="font-family:monospace;font-size:12px">${s.endpoint || '—'}</span>
+        <span class="lbl">可见性</span><span>${s.visibility === 0 ? '公开' : '私有'}</span>
+        <span class="lbl">Owner</span><span>${s.owner_app_id || '—'}</span>
+        <span class="lbl">状态</span><span>${s.status || '—'}</span>
+      </div>
+      <h3 style="margin-top:16px">Input Schema</h3>
+      <div class="code">${highlight(s.input_schema || {})}</div>
+      <h3 style="margin-top:12px">Output Schema</h3>
+      <div class="code">${highlight(s.output_schema || {})}</div>
+    `
+    document.getElementById('detail-modal').classList.add('open')
+  }
+
+  function closeModal() { document.getElementById('detail-modal').classList.remove('open') }
+
+  function showEdit(skillID) {
+    const s = allSkills.find(x => x.skill_id === skillID)
+    if (!s) return
+    editingSkillID = skillID
+    document.getElementById('edit-body').innerHTML = `
+      <div class="form-grid">
+        <div class="form-row"><label>名称</label><input id="e-name" value="${s.name || ''}" /></div>
+        <div class="form-row"><label>描述</label><input id="e-desc" value="${s.description || ''}" /></div>
+        <div class="form-row"><label>Endpoint</label><input id="e-endpoint" value="${s.endpoint || ''}" /></div>
+        <div class="form-row"><label>可见性</label>
+          <select id="e-visibility">
+            <option value="0" ${s.visibility === 0 ? 'selected' : ''}>公开</option>
+            <option value="1" ${s.visibility === 1 ? 'selected' : ''}>私有</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row"><label>Input Schema</label>
+        <textarea id="e-input-schema" rows="4">${JSON.stringify(s.input_schema || {}, null, 2)}</textarea>
+      </div>
+      <div class="form-row"><label>Output Schema</label>
+        <textarea id="e-output-schema" rows="3">${JSON.stringify(s.output_schema || {}, null, 2)}</textarea>
+      </div>
+    `
+    document.getElementById('edit-modal').classList.add('open')
+  }
+
+  function closeEditModal() { document.getElementById('edit-modal').classList.remove('open') }
+
+  async function doUpdate() {
+    const msg = document.getElementById('edit-msg')
+    let inputSchema, outputSchema
+    try { inputSchema = JSON.parse(document.getElementById('e-input-schema').value) } catch { msg.innerHTML = '<div class="alert alert-error">Input Schema 不是合法 JSON</div>'; return }
+    try { outputSchema = JSON.parse(document.getElementById('e-output-schema').value) } catch { msg.innerHTML = '<div class="alert alert-error">Output Schema 不是合法 JSON</div>'; return }
+    const body = {
+      name: document.getElementById('e-name').value.trim(),
+      description: document.getElementById('e-desc').value.trim(),
+      endpoint: document.getElementById('e-endpoint').value.trim(),
+      visibility: parseInt(document.getElementById('e-visibility').value),
+      input_schema: inputSchema,
+      output_schema: outputSchema,
+    }
+    const { ok, data } = await apiFetch('/skills/' + editingSkillID, { method: 'PUT', body: JSON.stringify(body) })
+    if (ok && data.code === 0) {
+      toast('更新成功', 'success')
+      closeEditModal()
+      loadSkills()
+    } else {
+      msg.innerHTML = `<div class="alert alert-error">❌ ${data.message || '更新失败'}</div>`
+    }
+  }
+
+  async function doDelete(skillID) {
+    if (!confirm(`确认删除 Skill：${skillID}？`)) return
+    const { ok, data } = await apiFetch('/skills/' + skillID, { method: 'DELETE' })
+    if (ok && data.code === 0) { toast('已删除', 'success'); loadSkills() }
+    else toast(data.message || '删除失败', 'error')
+  }
+
+  async function doApply(skillID) {
+    const reason = prompt('申请原因（可选）：')
+    if (reason === null) return
+    const { ok, data } = await apiFetch('/skills/' + skillID + '/apply', {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    })
+    if (ok && data.code === 0) toast('申请已提交', 'success')
+    else toast(data.message || '申请失败', 'error')
+  }
+
+  // 点击遮罩关闭
+  document.getElementById('detail-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal() })
+  document.getElementById('edit-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeEditModal() })
+
+  loadSkills()
+</script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>注册 / 登录 — Agent Gateway</title>
+  <script src="common.js"></script>
+  <style id="common-style"></style>
+  <style>
+    .auth-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 700px) { .auth-grid { grid-template-columns: 1fr; } }
+    .divider { border: none; border-top: 1px solid #e0e0e0; margin: 16px 0; }
+    .token-box { background: #2c3e50; color: #ecf0f1; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 12px; word-break: break-all; margin-top: 10px; }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+<div class="container">
+  <h1>🔑 注册 / 登录</h1>
+
+  <div id="msg-area"></div>
+
+  <div class="auth-grid">
+    <!-- 注册 -->
+    <div class="card">
+      <h2 style="margin-top:0">📝 注册新账号</h2>
+      <p style="font-size:13px;color:#666;margin-bottom:16px">自助注册，自设密码，注册后即可登录获取 Token</p>
+      <div class="form-row">
+        <label>App ID <span style="color:#e74c3c">*</span></label>
+        <input id="reg-appid" placeholder="例：my-service" />
+      </div>
+      <div class="form-row">
+        <label>密码 <span style="color:#e74c3c">*</span>（至少 8 位）</label>
+        <input id="reg-pwd" type="password" placeholder="设置登录密码" />
+      </div>
+      <div class="form-row">
+        <label>描述</label>
+        <input id="reg-desc" placeholder="可选，描述这个应用的用途" />
+      </div>
+      <button class="btn btn-primary" onclick="doRegister()">注册</button>
+      <div id="reg-result" style="margin-top:12px"></div>
+    </div>
+
+    <!-- 登录 -->
+    <div class="card">
+      <h2 style="margin-top:0">🔓 登录获取 Token</h2>
+      <p style="font-size:13px;color:#666;margin-bottom:16px">使用 App ID + 密码（或 secret）换取 JWT Token</p>
+      <div class="form-row">
+        <label>App ID <span style="color:#e74c3c">*</span></label>
+        <input id="login-appid" placeholder="你的 App ID" />
+      </div>
+      <div class="form-row">
+        <label>密码 / Secret <span style="color:#e74c3c">*</span></label>
+        <input id="login-pwd" type="password" placeholder="密码或 secret" />
+      </div>
+      <button class="btn btn-primary" onclick="doLogin()">登录</button>
+
+      <div id="login-result" style="margin-top:12px"></div>
+
+      <div id="token-section" style="display:none;margin-top:16px">
+        <hr class="divider">
+        <h3>✅ 登录成功</h3>
+        <p style="font-size:13px;color:#666">Token 已保存到浏览器，后续请求自动携带</p>
+        <div class="token-box" id="token-display"></div>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="copyToken()">复制 Token</button>
+          <a href="skills.html" class="btn btn-primary btn-sm">前往 Skill 管理 →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 当前登录状态 -->
+  <div class="card" id="current-session" style="display:none">
+    <h2 style="margin-top:0">📌 当前会话</h2>
+    <table>
+      <tr><th style="width:140px">字段</th><th>值</th></tr>
+      <tr><td>App ID</td><td id="sess-appid"></td></tr>
+      <tr><td>Token（前 40 位）</td><td id="sess-token" style="font-family:monospace;font-size:12px"></td></tr>
+    </table>
+    <div style="margin-top:14px">
+      <button class="btn btn-danger btn-sm" onclick="logout()">退出登录</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('common-style').textContent = COMMON_CSS
+  document.getElementById('nav-placeholder').innerHTML = renderNav('auth.html')
+
+  // 显示当前会话
+  const appID = getAppID(), token = getToken()
+  if (appID && token) {
+    document.getElementById('current-session').style.display = ''
+    document.getElementById('sess-appid').textContent = appID
+    document.getElementById('sess-token').textContent = token.slice(0, 40) + '...'
+    
+    // 检查 token 是否过期
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+      if (payload.exp) {
+        const expireDate = new Date(payload.exp * 1000)
+        const now = new Date()
+        if (payload.exp < now.getTime() / 1000) {
+          document.getElementById('sess-token').innerHTML = token.slice(0, 40) + '... <span style="color:#e74c3c;font-weight:600">(已过期)</span>'
+        } else {
+          const hoursLeft = ((payload.exp - now.getTime() / 1000) / 3600).toFixed(1)
+          document.getElementById('sess-token').innerHTML = token.slice(0, 40) + `... <span style="color:#27ae60;font-size:12px">(有效，还剩 ${hoursLeft} 小时)</span>`
+        }
+      }
+    } catch (e) {
+      // 忽略解析错误
+    }
+  }
+
+  async function doRegister() {
+    const appid = document.getElementById('reg-appid').value.trim()
+    const pwd   = document.getElementById('reg-pwd').value
+    const desc  = document.getElementById('reg-desc').value.trim()
+    const el    = document.getElementById('reg-result')
+    if (!appid || !pwd) { el.innerHTML = '<div class="alert alert-error">App ID 和密码不能为空</div>'; return }
+    el.innerHTML = '<div class="alert alert-info">注册中...</div>'
+    const { ok, data } = await apiFetch('/clients/register', {
+      method: 'POST',
+      body: JSON.stringify({ app_id: appid, password: pwd, description: desc })
+    })
+    if (ok && data.code === 0) {
+      el.innerHTML = `<div class="alert alert-success">✅ 注册成功！App ID：<strong>${data.data.app_id}</strong>，现在可以登录</div>`
+      document.getElementById('login-appid').value = appid
+      toast('注册成功', 'success')
+    } else {
+      el.innerHTML = `<div class="alert alert-error">❌ ${data.message || '注册失败'}</div>`
+    }
+  }
+
+  async function doLogin() {
+    const appid = document.getElementById('login-appid').value.trim()
+    const pwd   = document.getElementById('login-pwd').value
+    const el    = document.getElementById('login-result')
+    if (!appid || !pwd) { el.innerHTML = '<div class="alert alert-error">App ID 和密码不能为空</div>'; return }
+    el.innerHTML = '<div class="alert alert-info">登录中...</div>'
+    const { ok, data } = await apiFetch('/auth/token', {
+      method: 'POST',
+      body: JSON.stringify({ app_id: appid, secret: pwd })
+    })
+    if (ok && data.code === 0) {
+      setAuth(appid, data.data.token)
+      el.innerHTML = ''
+      document.getElementById('token-section').style.display = ''
+      document.getElementById('token-display').textContent = data.data.token
+      document.getElementById('current-session').style.display = ''
+      document.getElementById('sess-appid').textContent = appid
+      document.getElementById('sess-token').textContent = data.data.token.slice(0, 40) + '...'
+      document.getElementById('nav-placeholder').innerHTML = renderNav('auth.html')
+      toast('登录成功', 'success')
+    } else {
+      el.innerHTML = `<div class="alert alert-error">❌ ${data.message || '登录失败，检查 App ID 和密码'}</div>`
+    }
+  }
+
+  function copyToken() {
+    const t = getToken()
+    if (t) { navigator.clipboard.writeText(t).then(() => toast('Token 已复制', 'success')) }
+  }
+</script>
+</body>
+</html>

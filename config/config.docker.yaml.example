@@ -1,0 +1,60 @@
+server:
+  port: 8080
+  mode: debug
+
+database:
+  host: mysql
+  port: 3306
+  user: gateway
+  password: CHANGE_ME_IN_PRODUCTION
+  dbname: agent_gateway
+  charset: utf8mb4
+  max_idle_conns: 10
+  max_open_conns: 100
+
+redis:
+  host: redis
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+
+nacos:
+  enabled: false               # docker-compose 默认不启用 Nacos，用 Redis Pub/Sub 做配置热更新
+  host: nacos
+  port: 8848
+  namespace: "dev"
+  group: "agent-gateway"
+  data_id: "agent-gateway"
+  username: "nacos"
+  password: "nacos"
+  cache_dir: "/tmp/nacos"
+  log_level: "info"
+
+jwt:
+  # SECURITY: 生产环境必须改为强随机字符串,建议使用 `openssl rand -base64 32` 生成
+  secret: "CHANGE_ME_IN_PRODUCTION_USE_OPENSSL_RAND"
+  expire_hours: 24
+
+rate_limit:
+  default_qps: 100
+  enabled: true
+
+async_mq:
+  type: memory
+  brokers:
+    - kafka:9092
+  topic: agent-gateway.async-task
+  group_id: agent-gateway-reliable-worker
+  queue_buffer: 4096
+
+log:
+  level: info
+  format: json
+
+telemetry:
+  service_name: agent-gateway
+  otlp_endpoint: ""   # 留空禁用 OTel
+  sample_rate: 0.1
+
+internal_token: ""
