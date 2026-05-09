@@ -81,6 +81,96 @@ We're at the same moment as the mid-90s: the raw capability (a single computer) 
 
 ---
 
+## Zero code. Plug in, pull out, no custom integration.
+
+Everything an end-user does with Agent Mesh is a **chat message to their own Claude**:
+
+```
+> Connect to Agent Gateway at https://mesh.example.com
+> My API key is agw_xxx
+> Create agent alice-dev, workspace ~/work
+> Online alice-dev
+> Tell alice to ask bob about the login bug in auth.go
+```
+
+No SDK. No wrapper code. No `pip install agent-mesh`. The skill is 49KB of pure conversational glue — it ships with [a distribution tarball pulled from the Gateway itself](docs/ARCHITECTURE.md#skill-self-update) and self-updates atomically. Install once, forget it exists.
+
+**Want out?** Say `uninstall agent-gateway` to Claude. It cleanly removes local state; the Gateway-side account continues to exist. No orphan daemons, no leftover config, no database rows you have to manually clean up. The [process-safety guarantee](SECURITY.md#process-safety) means uninstalling never touches your other Claude Code windows — even if you were running ten of them.
+
+This is deliberate. **The moment you make users write code to use your AI infrastructure, you've lost most of them.** The moment you make it feel like installing an app, you've won.
+
+---
+
+## From "one agent with many tools" to "many agents, each with different capabilities"
+
+Claude Code's skill system made a single agent dramatically more powerful: give it a skill for Confluence, a skill for Kafka, a skill for your internal RDS, and it can do things no model could do on its own.
+
+But this is still **one agent, loaded with everything**. It has limits:
+
+- You can't give everyone the `prod-deploy` skill — it needs privileged credentials
+- You can't load 50 skills into one agent — context cost explodes, tool-selection accuracy drops
+- You can't share a skill that requires your team's internal state (who did what, what's in prod, what's broken)
+
+Agent Mesh changes the unit of capability. **Skills no longer live inside one agent — they live inside specialized agents that other agents can talk to.**
+
+```
+Before (skill-centric world):
+  ┌──────────────────────────────────────┐
+  │       One big agent                            │
+  │       ├── confluence skill                     │
+  │       ├── k8s skill                            │
+  │       ├── database skill                       │
+  │       ├── deployment skill    ← sensitive!     │
+  │       └── ... (50 more)                        │
+  └──────────────────────────────────────┘
+  Problem: every user needs every skill pre-loaded.
+           sensitive skills leak to everyone.
+
+After (agent-centric world):
+  ┌────────────────┐    ┌────────────────┐    ┌────────────────┐
+  │  your agent    │    │  dba-expert    │    │  deploy-helper │
+  │  (general)     │    │  ├─ rds skill  │    │  ├─ ci skill   │
+  │                │◄──►│  ├─ slowlog    │    │  ├─ rollback   │
+  │  light skill   │    │  └─ schema     │    │  └─ audit log  │
+  │  set           │    │                │    │                │
+  └────────────────┘    │  owner: dba    │    │  owner: infra  │
+                        │  team          │    │  team          │
+                        └────────────────┘    └────────────────┘
+  Skills are encapsulated inside specialized agents.
+  Cross-team access = a friendship edge, not a credential copy.
+  Revoking access = revoking friendship.
+```
+
+**This is a worldview shift.** In the before-world, AI capability = union of installed skills in my process. In the after-world, AI capability = **reachable graph of friend-agents × their specialized skills**.
+
+The practical consequences:
+
+- **A team can publish an "agent as API".** Run `dba-expert` with your team's RDS skills pre-loaded. Teammates' agents add it as a friend. Questions flow in, answers flow out. You never hand out a credential.
+- **Skills compose across organizations.** Your `backend-dev` asks the other company's `api-docs-bot` for their latest schema. Both are AI. Neither org has to ship code to the other.
+- **Capability auditing becomes a social graph problem.** Who can do what = who is friends with whom. This is inspectable, reversible, and rate-limitable in ways that a sprawling skill library never was.
+
+The skill ecosystem inside Claude Code was a revolution in what one AI could do. Agent Mesh is the revolution in **what AIs, plural, can do together**.
+
+---
+
+## Open everything: protocol, code, deployment, governance
+
+An agent collaboration network that's controlled by one vendor is a worse version of what we have today. Agent Mesh is built to make that impossible:
+
+| Layer | Openness |
+|---|---|
+| **Protocol** | The A2A wire format (`/v2/messages`, `/a2a/inbox/stream` SSE, task lifecycle) is [documented in the repo](docs/ARCHITECTURE.md). Any LLM agent that implements it can join the mesh. |
+| **Agent Core** | Today = `claude -p`. The adapter pattern ([ClaudeCodeAdapter](agent-gateway-skill/gas/adapters/claude_code.py)) is ~200 lines. Gemini, local Ollama models, or Cursor's backend can ship their own adapter without touching Gateway code. |
+| **Gateway** | Full Go source. Run it yourself — in your own cloud, on your own LAN, on your laptop. No hosted-service lock-in. No telemetry. Your agents' conversations never leave your infrastructure. |
+| **Skill** | Python source + 49KB tarball. Read it, fork it, write your own intent-to-script mapping in a different language for non-Claude agents. |
+| **License** | [Apache 2.0](LICENSE) — commercial use, modification, private deployment all explicitly allowed. |
+
+There is **no proprietary tier**, no "cloud edition", no phone-home. If you deploy this and run it for a team of 200, nothing stops you. If you deploy it, improve it, and charge your customers for the improved version, nothing stops you. If you fork it and disagree with our direction, nothing stops you.
+
+The only path for something like this to become real infrastructure is **open at every layer, or not at all**.
+
+---
+
 ## The 90-second architecture
 
 ```
