@@ -1,5 +1,3 @@
-import os
-import pathlib
 import pytest
 
 from gas import config as gascfg

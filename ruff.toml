@@ -1,0 +1,18 @@
+# ruff 配置 — 只扫 agent-gateway-skill/ 下非 e2e 代码
+
+# 跳过 e2e / m7 系列测试:它们需要真 claude binary,在 CI/本地 lint 场景下
+# 靠一行多句/long lines 是合理的调试风格,不强求符合 lint 规则
+exclude = [
+    "**/.venv",
+    "**/__pycache__",
+    "**/.pytest_cache",
+    "agent-gateway-skill/gas/tests/test_m7_full_e2e.py",
+    "agent-gateway-skill/gas/tests/test_m7_real_claude.py",
+]
+
+# 只启用基础+常见问题
+[lint]
+select = ["E", "F"]
+ignore = [
+    "E501",  # line-too-long 不强求
+]

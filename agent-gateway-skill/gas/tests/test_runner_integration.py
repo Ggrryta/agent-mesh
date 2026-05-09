@@ -10,11 +10,9 @@ M5 集成测试
 """
 import asyncio
 import json
-import os
 import pathlib
 import sys
 
-import aiohttp
 import pytest
 from aiohttp import web
 

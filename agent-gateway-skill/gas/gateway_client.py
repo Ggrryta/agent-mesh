@@ -229,7 +229,8 @@ class GatewayClient:
                         seq=int(payload.get("seq", 0)) if isinstance(payload, dict) else 0,
                     )
                     if evt.kind == "ping":
-                        event_kind = ""; buf_data = []
+                        event_kind = ""
+                        buf_data = []
                         continue
                     try:
                         await self.on_event(evt)

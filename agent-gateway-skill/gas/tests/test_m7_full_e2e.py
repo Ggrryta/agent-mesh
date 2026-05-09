@@ -34,7 +34,6 @@ import os
 import pathlib
 import subprocess
 import sys
-import time
 
 import aiohttp
 import pytest
@@ -263,7 +262,7 @@ async def test_e2e_two_agents_chat(minigw, gas_pair, tmp_path):
              config_path=alice_agw_cfg)
     assert "已发起好友请求" in r.stdout
 
-    pending = json.loads(_agw("friend", "pending", "--as", "bob", config_path=bob_agw_cfg).stdout
+    json.loads(_agw("friend", "pending", "--as", "bob", config_path=bob_agw_cfg).stdout
                          if False else "{}")  # stdout 是表格,解析太麻烦
     # 直接调 gateway 查 pending id
     pend_data = await _http_json(
