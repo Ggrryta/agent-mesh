@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📡 监控 · Agent Gateway</title>
+  <script src="common-v2.js"></script>
+  <style id="common-style"></style>
+  <style>
+    /* 两栏布局覆盖默认 container */
+    .monitor-wrap {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 0;
+      height: calc(100vh - 70px);  /* 减去 nav */
+      margin: 0;
+      padding: 0;
+      max-width: none;
+    }
+    .task-list {
+      border-right: 1px solid #e0e0e0;
+      background: #f8f9fa;
+      overflow-y: auto;
+    }
+    .task-list-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e0e0e0;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .task-list-header h3 { margin: 0; font-size: 15px; border: none; padding: 0 }
+    .conn-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      display: inline-block; margin-right: 6px;
+    }
+    .conn-dot.live { background: #34a853; box-shadow: 0 0 4px #34a853 }
+    .conn-dot.dead { background: #ea4335 }
+    .conn-dot.connecting { background: #fbbc04 }
+
+    .task-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .task-item:hover { background: #eef3ff }
+    .task-item.active { background: #e8f0fe; border-left: 3px solid #1a73e8; padding-left: 13px }
+    .task-item.unread { font-weight: 600 }
+    .task-item.unread::before {
+      content: '';
+      display: inline-block;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #1a73e8;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .task-item-title {
+      font-size: 14px; color: #1a1a1a;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .task-item-peers { font-size: 12px; color: #666; margin-top: 4px }
+    .task-item-peers .mine { color: #1a73e8; font-weight: 500 }
+    .task-item-preview {
+      font-size: 12px; color: #777; margin-top: 4px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .task-item-meta {
+      font-size: 11px; color: #999; margin-top: 4px;
+      display: flex; justify-content: space-between;
+    }
+    .task-item-status-closed .task-item-title { color: #888 }
+    .task-item-status-closed { opacity: 0.75 }
+    .badge-status { font-size: 10px; padding: 1px 6px; border-radius: 8px }
+    .badge-status.active { background: #e6f4ea; color: #137333 }
+    .badge-status.closed { background: #fce8e6; color: #c5221f }
+
+    /* 右栏 */
+    .task-detail {
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .detail-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid #e0e0e0;
+      background: white;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      flex-shrink: 0;
+    }
+    .detail-title { font-size: 16px; font-weight: 600; color: #1a1a1a }
+    .detail-sub { font-size: 12px; color: #777; margin-top: 4px }
+    .detail-actions button {
+      background: none; border: 1px solid #dadce0; padding: 4px 10px;
+      border-radius: 4px; font-size: 12px; cursor: pointer; margin-left: 6px;
+    }
+    .detail-actions button:hover { background: #f5f5f5 }
+
+    .msg-feed {
+      flex: 1; overflow-y: auto; padding: 16px 20px;
+      background: #fafafa;
+    }
+    .msg {
+      margin-bottom: 14px;
+      max-width: 80%;
+    }
+    .msg.mine { margin-left: auto }
+    .msg.mine .msg-bubble { background: #1a73e8; color: white }
+    .msg.mine .msg-head { text-align: right }
+    .msg-head {
+      font-size: 11px; color: #666; margin-bottom: 3px;
+      display: flex; gap: 8px;
+    }
+    .msg.mine .msg-head { justify-content: flex-end }
+    .msg-bubble {
+      background: white; border-radius: 8px;
+      padding: 10px 14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.05);
+      font-size: 13px; color: #202124;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .msg-bubble code {
+      font-family: Menlo, monospace; font-size: 12px;
+      background: rgba(0,0,0,.05); padding: 1px 4px; border-radius: 3px;
+    }
+    .msg.mine .msg-bubble code { background: rgba(255,255,255,.2) }
+
+    .empty-state {
+      display: flex; align-items: center; justify-content: center;
+      flex: 1; color: #999; font-size: 14px;
+    }
+
+    .msg-data {
+      background: #f0f4f9; border-left: 3px solid #1a73e8;
+      padding: 8px 10px; margin-top: 6px;
+      font-family: Menlo, monospace; font-size: 11px;
+      white-space: pre-wrap; word-break: break-all;
+      max-height: 200px; overflow-y: auto;
+    }
+    .msg.mine .msg-data { background: rgba(255,255,255,.15); border-left-color: white }
+
+    #toasts { position: fixed; top: 80px; right: 20px; z-index: 9999 }
+  </style>
+</head>
+<body>
+<div id="nav-placeholder"></div>
+
+<div class="monitor-wrap">
+  <!-- 左栏:task 列表 -->
+  <div class="task-list">
+    <div class="task-list-header">
+      <h3>
+        <span id="conn-indicator" class="conn-dot connecting" title="连接中..."></span>
+        我参与的 Task
+      </h3>
+      <button onclick="refreshTasks()" style="background:none; border:none; cursor:pointer; font-size:14px"
+              title="刷新">🔄</button>
+    </div>
+    <div id="task-list-body">
+      <div style="padding:20px; color:#999; text-align:center">加载中...</div>
+    </div>
+  </div>
+
+  <!-- 右栏:task 详情 -->
+  <div class="task-detail" id="detail-panel">
+    <div class="empty-state">
+      选择左侧任一 task 查看完整对话
+    </div>
+  </div>
+</div>
+
+<!-- 插入点,后续 <script> 写业务 -->
+<script>
+requireLogin()
+document.getElementById('nav-placeholder').innerHTML = renderNavV2('monitor.html')
+
+// 全局状态
+const state = {
+  tasks: [],              // [{task_id, title, status, members, last_message, ...}]
+  currentTaskID: null,    // 当前选中的
+  myAgents: new Set(),    // caller 名下的 agent_id
+  eventSource: null,      // SSE 连接
+  unread: new Map(),      // task_id -> 未读数(基于页面打开后新收的消息)
+}
+
+async function refreshTasks() {
+  try {
+    const r = await apiFetch('/monitor/tasks?limit=100')
+    const tasks = (r.data && r.data.tasks) || []
+    state.tasks = tasks
+    // 更新 myAgents 集合
+    state.myAgents.clear()
+    for (const t of tasks) {
+      for (const m of (t.members || [])) {
+        if (m.mine) state.myAgents.add(m.agent_id)
+      }
+    }
+    renderTaskList()
+  } catch (e) {
+    toast('加载 task 列表失败: ' + e.message, 'error')
+  }
+}
+
+function renderTaskList() {
+  const body = document.getElementById('task-list-body')
+  if (state.tasks.length === 0) {
+    body.innerHTML = '<div style="padding:20px; color:#999; text-align:center">还没有参与任何 task</div>'
+    return
+  }
+  body.innerHTML = state.tasks.map(t => {
+    const mine = (t.members || []).filter(m => m.mine).map(m => m.agent_id)
+    const others = (t.members || []).filter(m => !m.mine).map(m => m.agent_id)
+    const peers = `<span class="mine">${mine.join(', ')}</span> ↔ ${others.join(', ') || '(none)'}`
+    const preview = (t.last_message && t.last_message.preview) || '(无消息)'
+    const sender = (t.last_message && t.last_message.sender_agent_id) || ''
+    const time = t.last_message ? fmtTime(t.last_message.created_at) : fmtTime(t.created_at)
+    const unread = state.unread.get(t.task_id) || 0
+    const isActive = state.currentTaskID === t.task_id
+    const statusClosed = t.status !== 'active'
+    const cls = [
+      'task-item',
+      isActive ? 'active' : '',
+      unread > 0 ? 'unread' : '',
+      statusClosed ? 'task-item-status-closed' : '',
+    ].filter(Boolean).join(' ')
+    return `
+      <div class="${cls}" onclick="selectTask('${escapeHtml(t.task_id)}')">
+        <div class="task-item-title">${escapeHtml(t.title || '(无标题)')}</div>
+        <div class="task-item-peers">${peers}</div>
+        <div class="task-item-preview">${sender ? escapeHtml(sender) + ': ' : ''}${escapeHtml(preview)}</div>
+        <div class="task-item-meta">
+          <span>${time}</span>
+          <span class="badge-status ${t.status === 'active' ? 'active' : 'closed'}">${t.status}</span>
+        </div>
+      </div>
+    `
+  }).join('')
+}
+
+async function selectTask(taskID) {
+  state.currentTaskID = taskID
+  state.unread.delete(taskID)
+  renderTaskList()
+  const task = state.tasks.find(t => t.task_id === taskID)
+  if (!task) return
+  renderDetailHeader(task)
+  try {
+    const r = await apiFetch(`/monitor/tasks/${taskID}/messages?limit=200`)
+    const msgs = (r.data && r.data.messages) || []
+    renderMessages(msgs)
+  } catch (e) {
+    toast('加载消息失败: ' + e.message, 'error')
+  }
+}
+
+function renderDetailHeader(task) {
+  const mine = (task.members || []).filter(m => m.mine).map(m => m.agent_id).join(', ')
+  const others = (task.members || []).filter(m => !m.mine).map(m => m.agent_id).join(', ')
+  const panel = document.getElementById('detail-panel')
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-title">${escapeHtml(task.title || '(无标题)')}</div>
+        <div class="detail-sub">
+          ${escapeHtml(mine)} ↔ ${escapeHtml(others)}
+          · <code style="font-size:11px">${escapeHtml(task.task_id)}</code>
+          · <span class="badge-status ${task.status === 'active' ? 'active' : 'closed'}">${task.status}</span>
+        </div>
+      </div>
+      <div class="detail-actions">
+        <button onclick="refreshCurrentTaskMessages()">🔄 刷新</button>
+      </div>
+    </div>
+    <div class="msg-feed" id="msg-feed">
+      <div style="padding:20px; color:#999; text-align:center">加载中...</div>
+    </div>
+  `
+}
+
+function renderMessages(msgs) {
+  const feed = document.getElementById('msg-feed')
+  if (!feed) return
+  if (msgs.length === 0) {
+    feed.innerHTML = '<div style="padding:20px; color:#999; text-align:center">还没有消息</div>'
+    return
+  }
+  feed.innerHTML = msgs.map(renderSingleMsg).join('')
+  feed.scrollTop = feed.scrollHeight
+}
+
+function renderSingleMsg(m) {
+  const isMine = state.myAgents.has(m.sender_agent_id)
+  const text = extractTextFromParts(m.parts)
+  const dataExtras = extractDataPartsFromParts(m.parts)
+  return `
+    <div class="msg ${isMine ? 'mine' : ''}">
+      <div class="msg-head">
+        <span>${escapeHtml(m.sender_agent_id)}</span>
+        <span>${fmtTime(m.created_at)}</span>
+        <span style="color:#aaa">#${m.seq}</span>
+      </div>
+      <div class="msg-bubble">
+        ${text ? escapeHtml(text).replace(/\n/g, '<br>') : '<em style="color:#999">(no text)</em>'}
+        ${dataExtras ? `<div class="msg-data">${escapeHtml(dataExtras)}</div>` : ''}
+      </div>
+    </div>
+  `
+}
+
+function extractTextFromParts(parts) {
+  if (!Array.isArray(parts)) return ''
+  const texts = parts.filter(p => p && p.kind === 'text').map(p => p.text || '')
+  return texts.join('\n')
+}
+
+function extractDataPartsFromParts(parts) {
+  if (!Array.isArray(parts)) return ''
+  const datas = parts.filter(p => p && p.kind === 'data').map(p =>
+    JSON.stringify(p.data || {}, null, 2)
+  )
+  return datas.join('\n---\n')
+}
+
+async function refreshCurrentTaskMessages() {
+  if (!state.currentTaskID) return
+  try {
+    const r = await apiFetch(`/monitor/tasks/${state.currentTaskID}/messages?limit=200`)
+    renderMessages((r.data && r.data.messages) || [])
+  } catch (e) {
+    toast('刷新失败: ' + e.message, 'error')
+  }
+}
+
+function fmtTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d)) return ''
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (d >= today) {
+    return d.toTimeString().slice(0, 5)
+  }
+  return d.toLocaleDateString('zh-CN', {month: '2-digit', day: '2-digit'}) + ' ' + d.toTimeString().slice(0, 5)
+}
+
+// SSE 连接
+function connectSSE() {
+  const token = getToken()
+  if (!token) return
+  updateConnState('connecting')
+  // SSE 不支持自定义 header,用 query 传 token (Auth middleware 会接受 ?token=)
+  const url = `/monitor/stream?token=${encodeURIComponent(token)}`
+  const es = new EventSource(url)
+  state.eventSource = es
+  es.onopen = () => updateConnState('live')
+  es.onerror = () => {
+    updateConnState('dead')
+    es.close()
+    state.eventSource = null
+    // 指数退避重连
+    setTimeout(() => { if (!state.eventSource) connectSSE() }, 3000)
+  }
+  es.addEventListener('message', (e) => handleMonitorEvent('message', JSON.parse(e.data)))
+  es.addEventListener('task_created', (e) => handleMonitorEvent('task_created', JSON.parse(e.data)))
+  es.addEventListener('task_closed', (e) => handleMonitorEvent('task_closed', JSON.parse(e.data)))
+  es.addEventListener('ping', () => {/* keepalive,不做事 */})
+}
+
+function updateConnState(s) {
+  const el = document.getElementById('conn-indicator')
+  if (!el) return
+  el.className = 'conn-dot ' + s
+  el.title = {live: '已连接', dead: '断开,自动重连中...', connecting: '连接中...'}[s] || s
+}
+
+function handleMonitorEvent(kind, evt) {
+  const d = evt.data || {}
+  const taskID = d.task_id
+  if (!taskID) return
+  if (kind === 'task_created' || kind === 'message') {
+    // 可能是新 task,也可能是已有 task 新消息
+    // 简单做法:整体刷新 task 列表(保证完整性),然后如果当前看的 task 就重拉消息
+    refreshTasks().then(() => {
+      if (state.currentTaskID === taskID) {
+        refreshCurrentTaskMessages()
+      } else {
+        state.unread.set(taskID, (state.unread.get(taskID) || 0) + 1)
+        renderTaskList()
+      }
+    })
+  } else if (kind === 'task_closed') {
+    refreshTasks()
+    if (state.currentTaskID === taskID) {
+      // 如果正在看这个 task,header 的 status 也要刷,重新拉一次就好
+      setTimeout(refreshCurrentTaskMessages, 100)
+    }
+  }
+}
+
+// 启动
+;(async () => {
+  await refreshTasks()
+  connectSSE()
+})()
+</script>
+</body>
+</html>

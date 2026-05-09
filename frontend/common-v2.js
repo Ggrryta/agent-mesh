@@ -48,6 +48,7 @@ function renderNavV2(active) {
     { href: 'apikey-v2.html',  label: '🗝️ API Key' },
     { href: 'agents.html',     label: '🤖 我的 Agent' },
     { href: 'friends.html',    label: '👥 好友' },
+    { href: 'monitor.html',    label: '📡 监控' },
     { href: 'directory.html',  label: '📇 目录' },
   ]
   // 兼容:如果当前就是 index-v2.html(旧链接),也高亮 index.html

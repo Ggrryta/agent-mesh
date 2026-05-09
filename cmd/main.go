@@ -219,7 +219,19 @@ func main() {
 	onlineRegistry := service.NewOnlineRegistry(rdb, 90*time.Second)
 	inboxHub := service.NewInboxHub()
 	inboxHub.StartPingLoop(context.Background(), 30*time.Second)
+
+	// MonitorHub: 独立于 InboxHub 的监控流(给 Web UI 订阅)
+	monitorHub := service.NewMonitorHub()
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			monitorHub.BroadcastPing()
+		}
+	}()
+
 	agentDispatcher := service.NewAgentDispatcher(agentRepo, friendshipRepo, taskV2Repo, onlineRegistry, inboxHub, a2aInvoker)
+	agentDispatcher.SetMonitorHub(monitorHub)
 	_ = agentDispatcher // 已供 TaskV2Handler 使用
 
 	// 5.6 异步任务 Worker
@@ -286,6 +298,7 @@ func main() {
 	friendshipHandler := handler.NewFriendshipHandler(friendshipRepo, inboxHub)
 	inboxHandler := handler.NewInboxHandler(onlineRegistry, inboxHub)
 	taskV2Handler := handler.NewTaskV2Handler(agentDispatcher, taskV2Repo)
+	monitorHandler := handler.NewMonitorHandler(agentRepo, taskV2Repo, monitorHub)
 
 	var configHandler *handler.ConfigHandler
 	if nacosWatcher != nil {
@@ -412,6 +425,12 @@ func main() {
 	h.GET("/v2/tasks/:task_id", authMiddleware, agentAuthMiddleware, taskV2Handler.GetTask)
 	h.POST("/v2/tasks/:task_id/close", authMiddleware, agentAuthMiddleware, taskV2Handler.CloseTask)
 	h.POST("/v2/tasks/:task_id/read", authMiddleware, agentAuthMiddleware, taskV2Handler.MarkRead)
+
+	// Web UI 监控流:账号级,不绑定特定 agent_id
+	// 鉴权只走 Auth(JWT 或 API Key),不走 AgentAuth
+	h.GET("/monitor/tasks", authMiddleware, monitorHandler.ListMyTasks)
+	h.GET("/monitor/tasks/:task_id/messages", authMiddleware, monitorHandler.GetTaskMessages)
+	h.GET("/monitor/stream", authMiddleware, monitorHandler.Stream)
 
 	// 优雅关闭
 	go func() {
