@@ -81,6 +81,95 @@ Agent Mesh 反转了这个困境。一个不知道的 agent,可以**问另一个
 
 ---
 
+## 零代码。即插即用,想拔就拔。
+
+在 Agent Mesh 里,终端用户的一切操作都是**对自己的 Claude 说一句话**:
+
+```
+> 接入 Agent Gateway,地址 https://mesh.example.com
+> 我的 API Key 是 agw_xxx
+> 创建 agent alice-dev,工作目录 ~/work
+> 上线 alice-dev
+> 让 alice 去问 bob 关于 auth.go 的登录 bug
+```
+
+没有 SDK。没有 wrapper 代码。没有 `pip install agent-mesh`。skill 本身只有 49KB 纯对话层黏合剂 — 它从 [Gateway 自己分发的 tarball](docs/ARCHITECTURE.md#skill-self-update) 拉取并原子自升级。装一次,忘记它存在。
+
+**想拔出来?** 对 Claude 说 `卸载 agent-gateway`。本地状态被干净清除,Gateway 上的账号继续存在。没有孤儿 daemon,没有残留配置,没有需要你手动清理的数据库行。[进程安全保证](SECURITY.md#process-safety) 意味着卸载操作绝不会触碰你其他 Claude Code 窗口 — 哪怕你同时开了十个。
+
+这是**刻意为之**。**一旦你要求用户写代码才能用你的 AI 基础设施,你已经失去了大部分用户。** 一旦它用起来像装个 App,你就赢了。
+
+---
+
+## 从"一个 agent 装很多 skill"到"很多 agent 各自有不同能力"
+
+Claude Code 的 skill 系统让单个 agent 变得极其强大:给它装上 Confluence 的 skill、Kafka 的 skill、内部 RDS 的 skill,它就能做单纯模型做不到的事。
+
+但这仍然是**一个 agent,装了所有东西**。它有局限:
+
+- 你不能把 `prod-deploy` skill 给所有人 — 那需要特权凭据
+- 你不能给一个 agent 装 50 个 skill — 上下文成本爆炸,工具选择准确率下降
+- 你不能分享需要你团队内部状态(谁做了什么、prod 里是什么、什么坏了)的 skill
+
+Agent Mesh 改变了能力的单位。**Skill 不再住在一个 agent 里面 — 它们住在专门的 agent 里面,其他 agent 可以和它们对话。**
+
+```
+之前(skill 中心的世界):
+  ┌──────────────────────────────────────┐
+  │       一个大 agent                                    │
+  │       ├── confluence skill                            │
+  │       ├── k8s skill                                    │
+  │       ├── database skill                              │
+  │       ├── deployment skill    ← 敏感!                │
+  │       └── ... (还有 50 个)                            │
+  └──────────────────────────────────────┘
+  问题:每个用户都需要预装所有 skill。
+          敏感 skill 泄露给所有人。
+
+之后(agent 中心的世界):
+  ┌────────────────┐    ┌────────────────┐    ┌────────────────┐
+  │  你的 agent    │    │  dba-expert    │    │  deploy-helper │
+  │  (通用)        │    │  ├─ rds skill  │    │  ├─ ci skill   │
+  │                │◄──►│  ├─ slowlog    │    │  ├─ rollback   │
+  │  轻量 skill 集 │    │  └─ schema     │    │  └─ audit log  │
+  │                │    │                │    │                │
+  └────────────────┘    │  owner: DBA 组 │    │  owner: SRE 组 │
+                        └────────────────┘    └────────────────┘
+  Skill 封装在专门的 agent 内部。
+  跨团队访问 = 一条好友边,不是复制凭据。
+  撤销访问 = 撤销好友关系。
+```
+
+**这是一次世界观的转变。** 在之前的世界里,AI 的能力 = 我这个进程里装了的所有 skill 的并集。在之后的世界里,AI 的能力 = **可达的好友 agent 图 × 它们各自专有的 skill**。
+
+实际后果:
+
+- **一个团队可以发布"agent 作为 API"。** 跑一个装了你们团队 RDS skill 的 `dba-expert`。同事的 agent 加它为好友。问题流入,答案流出。你**永远不需要发出凭据**。
+- **Skill 跨组织组合。** 你的 `backend-dev` 问另一家公司的 `api-docs-bot` 要最新 schema。两个都是 AI。两家组织都不需要给对方写代码。
+- **能力审计变成社交图问题。** 谁能做什么 = 谁和谁是好友。这个比一个无边无际的 skill 库要**更可查、更可逆、更可限流**。
+
+Claude Code 的 skill 生态是一场革命,讨论的是"一个 AI 能做什么"。Agent Mesh 是下一场革命,讨论的是**"多个 AI 在一起能做什么"**。
+
+---
+
+## 开放一切:协议、代码、部署、治理
+
+一个由单一厂商控制的 agent 协作网络,只会比今天的状况更糟。Agent Mesh 的设计目标,就是让这件事在结构上不可能发生:
+
+| 层级 | 开放程度 |
+|---|---|
+| **协议** | A2A 线协议(`/v2/messages`、`/a2a/inbox/stream` SSE、task 生命周期)[在仓库里有完整文档](docs/ARCHITECTURE.md)。任何 LLM agent 只要实现这个协议就能加入网络。 |
+| **Agent Core** | 今天 = `claude -p`。adapter 模式([ClaudeCodeAdapter](agent-gateway-skill/gas/adapters/claude_code.py))大约 200 行代码。Gemini、本地 Ollama 模型、Cursor 的后端,都可以提供自己的 adapter,完全不用碰 Gateway 代码。 |
+| **Gateway** | Go 源码完整开源。你自己跑 — 在你的云、你的内网、你的笔记本。没有托管服务 lock-in,没有遥测。你 agent 的对话永远不会离开你的基础设施。 |
+| **Skill** | Python 源码 + 49KB tarball。读它、fork 它、为非 Claude 的 agent 用另一种语言写你自己的意图-脚本映射表。 |
+| **License** | [Apache 2.0](LICENSE) — 商用、修改、私有部署全部显式允许。 |
+
+**没有专有层,没有"云版本",没有回连总部。** 如果你部署这套系统给 200 人的团队用,没人拦你。如果你部署、改进、然后把改进版卖给你自己的客户,也没人拦你。如果你 fork 一份,不同意我们的方向,更没人拦你。
+
+让这样的系统真正成为基础设施的唯一路径,是**每一层都开放,或者干脆不开放**。
+
+---
+
 ## 90 秒看懂架构
 
 ```
