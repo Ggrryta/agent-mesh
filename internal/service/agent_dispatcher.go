@@ -56,13 +56,15 @@ var (
 //	4. 对 pull 模式 agent:检查在线(OnlineRegistry)
 //	5. 创建/追加 task_messages
 //	6. 通过 InboxHub 推送给 target
+//	7. 通过 MonitorHub 推送给 Web UI 监控流(如果配置了)
 type AgentDispatcher struct {
-	agentRepo       *repo.AgentRepo
-	friendRepo      *repo.FriendshipRepo
-	taskRepo        *repo.TaskV2Repo
-	onlineReg       *OnlineRegistry
-	hub             *InboxHub
-	pushInvoker     *A2AInvoker // 保留 push 模式兼容(本期 pull 优先)
+	agentRepo   *repo.AgentRepo
+	friendRepo  *repo.FriendshipRepo
+	taskRepo    *repo.TaskV2Repo
+	onlineReg   *OnlineRegistry
+	hub         *InboxHub
+	monitorHub  *MonitorHub // 可选,nil 表示不推监控流
+	pushInvoker *A2AInvoker // 保留 push 模式兼容(本期 pull 优先)
 }
 
 func NewAgentDispatcher(
@@ -81,6 +83,12 @@ func NewAgentDispatcher(
 		hub:         hub,
 		pushInvoker: pushInvoker,
 	}
+}
+
+// SetMonitorHub 注入 MonitorHub。在 NewAgentDispatcher 之后链式调用。
+// 分开设置是为了不破坏已有 constructor 签名(其他调用方如 minigwlib 不受影响)。
+func (d *AgentDispatcher) SetMonitorHub(h *MonitorHub) {
+	d.monitorHub = h
 }
 
 // SendMessage 统一发送入口
@@ -180,6 +188,21 @@ func (d *AgentDispatcher) SendMessage(ctx context.Context, in SendMessageInput) 
 		zap.String("target", in.Target), zap.String("task_id", result.TaskID),
 		zap.Int("seq", result.Seq), zap.Bool("delivered", delivered))
 
+	// 6. 同时推到监控流(Web UI 订阅者)
+	if d.monitorHub != nil {
+		members := []string{in.Sender, in.Target}
+		if createdTask {
+			d.monitorHub.PublishTaskEvent(members, &MonitorEvent{
+				Kind: MonitorEventTaskCreated,
+				Data: eventData,
+			})
+		}
+		d.monitorHub.PublishTaskEvent(members, &MonitorEvent{
+			Kind: MonitorEventMessage,
+			Data: eventData,
+		})
+	}
+
 	return result, nil
 }
 
@@ -206,6 +229,20 @@ func (d *AgentDispatcher) CloseTask(ctx context.Context, taskID, callerAgentID s
 		d.hub.Publish(m.AgentID, InboxEventTaskClosed, map[string]any{
 			"task_id":   taskID,
 			"closed_by": callerAgentID,
+		})
+	}
+	// 同时推到监控流
+	if d.monitorHub != nil {
+		memberIDs := make([]string, 0, len(members))
+		for _, m := range members {
+			memberIDs = append(memberIDs, m.AgentID)
+		}
+		d.monitorHub.PublishTaskEvent(memberIDs, &MonitorEvent{
+			Kind: MonitorEventTaskClosed,
+			Data: map[string]any{
+				"task_id":   taskID,
+				"closed_by": callerAgentID,
+			},
 		})
 	}
 	return nil
