@@ -24,7 +24,8 @@ def main():
         gateway_call("POST", f"/friendships/{args.friendship_id}/{args.action}",
                      agent_id=me)
     except GatewayError as e:
-        print(f"❌ {args.action} 失败: {e}", file=sys.stderr); return 1
+        print(f"❌ {args.action} 失败: {e}", file=sys.stderr)
+        return 1
     ok(f"{VERB_MAP[args.action]} 好友关系 {args.friendship_id}")
     return 0
 

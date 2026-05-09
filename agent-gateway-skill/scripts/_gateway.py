@@ -7,7 +7,6 @@ _gateway.py —— 直接调 Gateway 的辅助
 from __future__ import annotations
 
 import json
-import sys
 import urllib.error
 import urllib.request
 from typing import Any

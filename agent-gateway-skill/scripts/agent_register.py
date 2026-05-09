@@ -24,7 +24,7 @@ import pathlib
 import sys
 
 import ensure_daemon
-from _common import DaemonError, die, http_call, load_skill_config, ok, require_config
+from _common import DaemonError, die, http_call, ok, require_config
 
 
 def main():
