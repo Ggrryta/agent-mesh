@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"agent-gateway/internal/model"
 	"agent-gateway/internal/repo"
 	"agent-gateway/pkg/logger"
+	"agent-gateway/pkg/ratelimit"
 
 	"go.uber.org/zap"
 	"gorm.io/datatypes"
@@ -23,12 +25,13 @@ type A2AMessagePart struct {
 
 // SendMessageInput 调用方 → dispatcher 的通用入参
 type SendMessageInput struct {
-	Sender    string            // 发送方 agent_id
-	Target    string            // 目标 agent_id
-	TaskID    string            // 为空 = 新建 task
-	Title     string            // 新建 task 时用
-	MessageID string            // 发送方生成的 UUID
-	Parts     []A2AMessagePart  // A2A 消息内容
+	Sender       string           // 发送方 agent_id
+	Target       string           // 目标 agent_id
+	TaskID       string           // 为空 = 新建 task
+	Title        string           // 新建 task 时用
+	MessageID    string           // 发送方生成的 UUID
+	Parts        []A2AMessagePart // A2A 消息内容
+	CallerAppID  string           // 发送方所属账号(用于 per-account 限流,可空)
 }
 
 // SendMessageResult 返回结果
@@ -46,6 +49,8 @@ var (
 	ErrAgentOffline = errors.New("agent offline")
 	// ErrAgentNotFound target agent 不存在
 	ErrAgentNotFound = errors.New("agent not found")
+	// ErrRateLimited 触发速率限制
+	ErrRateLimited = errors.New("rate limit exceeded")
 )
 
 // AgentDispatcher 消息投递中枢
@@ -65,6 +70,37 @@ type AgentDispatcher struct {
 	hub         *InboxHub
 	monitorHub  *MonitorHub // 可选,nil 表示不推监控流
 	pushInvoker *A2AInvoker // 保留 push 模式兼容(本期 pull 优先)
+	limiter     ratelimit.Limiter // 可选,nil 表示不限流(测试/e2e 时可关)
+	limitCfg    RateLimitConfig
+}
+
+// RateLimitConfig 控制 SendMessage 的速率限制策略
+// 三层 key,任一层触发都会拒绝
+type RateLimitConfig struct {
+	// 每个 sender agent 的限流:windows 秒内最多 N 条
+	PerSenderQPS     int // 每秒最多几条(0=不限)
+	PerSenderWindow  int // 秒数,默认 1
+
+	// 每对 (sender, target) 的限流:防 A↔B 无限往返
+	PerPairQPS    int // windows 秒内最多 N 条(0=不限)
+	PerPairWindow int // 秒数,默认 10
+
+	// 每账号的限流:防单账号全局刷爆
+	PerAccountQPS    int // windows 秒内最多 N 条(0=不限)
+	PerAccountWindow int // 秒数,默认 60
+}
+
+// DefaultRateLimitConfig 小团队内网默认值
+// 实际生产可通过 config.yaml 或 env 覆盖
+func DefaultRateLimitConfig() RateLimitConfig {
+	return RateLimitConfig{
+		PerSenderQPS:     5,  // 每个 sender 1 秒最多 5 条
+		PerSenderWindow:  1,
+		PerPairQPS:       20, // 每对 agent 10 秒最多 20 条
+		PerPairWindow:    10,
+		PerAccountQPS:    200, // 每账号 1 分钟最多 200 条
+		PerAccountWindow: 60,
+	}
 }
 
 func NewAgentDispatcher(
@@ -91,8 +127,65 @@ func (d *AgentDispatcher) SetMonitorHub(h *MonitorHub) {
 	d.monitorHub = h
 }
 
+// SetRateLimiter 注入限流器和策略。nil limiter 表示关闭限流(测试/e2e)
+func (d *AgentDispatcher) SetRateLimiter(l ratelimit.Limiter, cfg RateLimitConfig) {
+	d.limiter = l
+	d.limitCfg = cfg
+}
+
+// checkRateLimit 三层限流校验:per-sender / per-pair / per-account
+// 任一层触发都返回 ErrRateLimited。callerAppID 可以为空(向后兼容)。
+func (d *AgentDispatcher) checkRateLimit(ctx context.Context, senderAgent, targetAgent, callerAppID string) error {
+	if d.limiter == nil {
+		return nil
+	}
+	cfg := d.limitCfg
+
+	// 层 1: per-sender
+	if cfg.PerSenderQPS > 0 {
+		key := fmt.Sprintf("rl:msg:sender:%s", senderAgent)
+		if err := d.limiter.Check(ctx, key, cfg.PerSenderQPS); err != nil {
+			logger.Warn("rate limit: per-sender triggered",
+				zap.String("sender", senderAgent), zap.Error(err))
+			return ErrRateLimited
+		}
+	}
+
+	// 层 2: per-pair(有序化 key,避免 A→B 和 B→A 分别计数)
+	if cfg.PerPairQPS > 0 {
+		a, b := senderAgent, targetAgent
+		if a > b {
+			a, b = b, a
+		}
+		key := fmt.Sprintf("rl:msg:pair:%s:%s", a, b)
+		if err := d.limiter.Check(ctx, key, cfg.PerPairQPS); err != nil {
+			logger.Warn("rate limit: per-pair triggered",
+				zap.String("sender", senderAgent), zap.String("target", targetAgent),
+				zap.Error(err))
+			return ErrRateLimited
+		}
+	}
+
+	// 层 3: per-account
+	if cfg.PerAccountQPS > 0 && callerAppID != "" {
+		key := fmt.Sprintf("rl:msg:account:%s", callerAppID)
+		if err := d.limiter.Check(ctx, key, cfg.PerAccountQPS); err != nil {
+			logger.Warn("rate limit: per-account triggered",
+				zap.String("app_id", callerAppID), zap.Error(err))
+			return ErrRateLimited
+		}
+	}
+
+	return nil
+}
+
 // SendMessage 统一发送入口
 func (d *AgentDispatcher) SendMessage(ctx context.Context, in SendMessageInput) (*SendMessageResult, error) {
+	// 0. 速率限制(最早拒绝,避免无谓的 DB/Redis 查询)
+	if err := d.checkRateLimit(ctx, in.Sender, in.Target, in.CallerAppID); err != nil {
+		return nil, err
+	}
+
 	// 1. sender / target agent 存在性
 	targetAgent, err := d.agentRepo.GetByAgentID(ctx, in.Target)
 	if err != nil {

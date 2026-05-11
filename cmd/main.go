@@ -232,6 +232,7 @@ func main() {
 
 	agentDispatcher := service.NewAgentDispatcher(agentRepo, friendshipRepo, taskV2Repo, onlineRegistry, inboxHub, a2aInvoker)
 	agentDispatcher.SetMonitorHub(monitorHub)
+	agentDispatcher.SetRateLimiter(limiter, service.DefaultRateLimitConfig())
 	_ = agentDispatcher // 已供 TaskV2Handler 使用
 
 	// 5.6 异步任务 Worker

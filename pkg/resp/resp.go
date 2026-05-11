@@ -19,6 +19,7 @@ const (
 	CodeTaskClosed       = 9004 // task 已关闭
 	CodeTaskNotMember    = 9005 // 调用方不是 task 成员
 	CodeAgentConflict    = 9006 // 同一 agent_id 已在别处在线
+	CodeRateLimited      = 9007 // 触发速率限制
 )
 
 // Response 统一响应结构

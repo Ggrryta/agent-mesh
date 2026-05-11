@@ -60,6 +60,7 @@ func (h *TaskV2Handler) SendMessage(ctx context.Context, c *app.RequestContext) 
 	input.Sender = self
 	input.MessageID = req.MessageID
 	input.Parts = req.Parts
+	input.CallerAppID = c.GetString(ctxkey.AppID) // 用于 per-account 限流
 
 	if req.TaskID != "" {
 		// 在已有 task 追加: target 暂不需要,走 task member 校验
@@ -105,6 +106,8 @@ func (h *TaskV2Handler) SendMessage(ctx context.Context, c *app.RequestContext) 
 			c.JSON(consts.StatusServiceUnavailable, resp.Err(resp.CodeAgentOffline, "target agent offline"))
 		case errors.Is(err, service.ErrAgentNotFound):
 			c.JSON(consts.StatusNotFound, resp.Err(resp.CodeNotFound, "target agent not found"))
+		case errors.Is(err, service.ErrRateLimited):
+			c.JSON(consts.StatusTooManyRequests, resp.Err(resp.CodeRateLimited, "rate limit exceeded; slow down"))
 		case errors.Is(err, repo.ErrTaskV2NotFound):
 			c.JSON(consts.StatusNotFound, resp.Err(resp.CodeNotFound, "task not found or not a member"))
 		case errors.Is(err, repo.ErrTaskV2BadState):

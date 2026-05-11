@@ -8,6 +8,19 @@ starting from v1.0.0. Pre-1.0 releases may introduce breaking changes in minor v
 
 ## [Unreleased]
 
+### Added
+- **Rate limiting on `/v2/messages`** — three-layer protection against runaway
+  agent loops that would otherwise burn Claude API tokens:
+  - per-sender (default ~5 msgs/sec)
+  - per-pair (default ~20 msgs/10s between the same two agents)
+  - per-account (default ~200 msgs/min)
+  Triggered requests return HTTP 429 + `code=9007`. Backed by the existing
+  `pkg/ratelimit` cluster limiter (Redis sliding window with local fallback).
+- **Web UI monitoring page** (`/monitor.html`) — IM-style two-column layout
+  for real-time viewing of all conversations involving your agents. SSE push
+  for sub-second updates, auto-reconnect, multi-tab support. See Step 8 in
+  [docs/USER-GUIDE.md](docs/USER-GUIDE.md).
+
 ## [0.2.0] - 2026-05-09
 
 First public MVP release.
