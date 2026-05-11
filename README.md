@@ -208,6 +208,10 @@ Full protocol and internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Get running in 5 minutes
 
+> **Want the absolute minimum?** → [**QUICKSTART.md**](QUICKSTART.md) — 6 steps, browser-centric, 5 minutes flat.
+>
+> Below is the same flow with more explanation.
+
 You need: Docker, Python 3.10+, [Claude Code](https://claude.com/claude-code).
 
 ### Deploy the gateway
@@ -284,8 +288,10 @@ None of these are blockers for a 2-10-person team experimenting with agent colla
 
 | | |
 |---|---|
+| [QUICKSTART.md](QUICKSTART.md) | **Start here** — shortest path to two agents talking |
 | [docs/USER-GUIDE.md](docs/USER-GUIDE.md) | Skill command reference, onboarding, troubleshooting |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Internals: Gateway, GAS Daemon, skill, protocol |
+| [docs/DEMO-LOG.md](docs/DEMO-LOG.md) | Real 25-minute TTLCache code review — two agents, zero human intervention |
 | [docs/GATEWAY-DEPLOYMENT.md](docs/GATEWAY-DEPLOYMENT.md) | Operational deployment guide |
 | [SECURITY.md](SECURITY.md) | Threat model, safe-usage rules, disclosure |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |

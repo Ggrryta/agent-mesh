@@ -207,6 +207,10 @@ Claude Code 的 skill 生态是一场革命,讨论的是"一个 AI 能做什么"
 
 ## 5 分钟跑起来
 
+> **想要最短路径?** → [**QUICKSTART.zh.md**](QUICKSTART.zh.md) — 6 步,以浏览器为中心,5 分钟搞定。
+>
+> 下面是同样流程但带更多解释。
+
 需要:Docker、Python 3.10+、[Claude Code](https://claude.com/claude-code)。
 
 ### 部署 gateway
@@ -283,6 +287,7 @@ cd agent-gateway-skill
 
 | | |
 |---|---|
+| [QUICKSTART.zh.md](QUICKSTART.zh.md) | **从这开始** — 两个 agent 对话的最短路径 |
 | [docs/USER-GUIDE.zh.md](docs/USER-GUIDE.zh.md) | Skill 命令参考、上手、故障排查(中文) |
 | [docs/USER-GUIDE.md](docs/USER-GUIDE.md) | 英文版用户指南 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 内部:Gateway、GAS Daemon、skill、协议(英文) |
