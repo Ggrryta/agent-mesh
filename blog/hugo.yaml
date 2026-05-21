@@ -1,7 +1,8 @@
 baseURL: "https://ggrryta.github.io/agent-mesh/"
 title: "Agent-Mesh Blog"
 theme: "PaperMod"
-paginate: 10
+pagination:
+  pagerSize: 10
 
 defaultContentLanguage: zh
 defaultContentLanguageInSubdir: true
