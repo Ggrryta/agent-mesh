@@ -1,0 +1,36 @@
+{
+  "name": "agent-meshd",
+  "version": "0.2.0",
+  "description": "Agent-Mesh local daemon — runs autonomous agents on top of Claude Agent SDK, exposes a localhost HTTP API and UI.",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "web:install": "cd web && bun install",
+    "web:dev": "cd web && bun run dev",
+    "web:build": "cd web && bun run build",
+    "web:embed": "bun run scripts/embed-web.ts",
+    "bundle": "bun run web:build && bun run web:embed && bun run build",
+    "build": "bun build src/index.ts --compile --outfile dist/agent-meshd",
+    "build:darwin-arm64": "bun build src/index.ts --compile --target=bun-darwin-arm64 --outfile dist/agent-meshd-darwin-arm64",
+    "build:darwin-x64": "bun build src/index.ts --compile --target=bun-darwin-x64 --outfile dist/agent-meshd-darwin-x64",
+    "build:linux-x64": "bun build src/index.ts --compile --target=bun-linux-x64 --outfile dist/agent-meshd-linux-x64",
+    "build:linux-arm64": "bun build src/index.ts --compile --target=bun-linux-arm64 --outfile dist/agent-meshd-linux-arm64",
+    "build:windows-x64": "bun build src/index.ts --compile --target=bun-windows-x64 --outfile dist/agent-meshd-windows-x64.exe",
+    "build:all": "bun run build:darwin-arm64 && bun run build:darwin-x64 && bun run build:linux-x64 && bun run build:linux-arm64 && bun run build:windows-x64",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "latest",
+    "hono": "^4.6.0",
+    "kafkajs": "^2.2.4",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "tsx": "^4.21.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  }
+}

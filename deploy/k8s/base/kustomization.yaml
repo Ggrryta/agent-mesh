@@ -1,0 +1,36 @@
+# Agent-Mesh 的 kustomize base。
+#
+# 本地 k3d 集群用这条命令应用：
+#   kubectl apply -k deploy/k8s/base
+#
+# 产出：
+#   - Namespace   agent-mesh
+#   - ConfigMap   gateway-config（非敏感 env）
+#   - Secret      gateway-secrets（占位；生产 overlay 替换为 ExternalSecrets）
+#   - Deployment  gateway（2 副本 + 三种探针 + 滚动升级 + 资源限制）
+#   - Service     gateway-business（ClusterIP :8080）
+#   - Service     gateway-admin（ClusterIP :9090，仅内部）
+#   - Ingress     gateway（把 host "mesh.localhost" 路由到业务 service）
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agent-mesh
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+# commonLabels 是 kustomize v4 的写法，kustomize v5 起建议改成 labels。
+# 用 labels + includeSelectors=true 等价替换，避免 deprecation warning。
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/part-of: agent-mesh
+
+images:
+  - name: agent-mesh-gateway
+    newName: k3d-mesh-registry:5555/agent-mesh-gateway
+    newTag: dev

@@ -1,0 +1,29 @@
+# 通过 k3d 内置的 traefik 提供 Ingress（k3s 默认自带）。
+#
+# host "mesh.localhost" 在 macOS 上会自动解析到 127.0.0.1（.localhost 是
+# 保留 TLD）。如果你的环境不行，往 /etc/hosts 加一条：
+#   127.0.0.1  mesh.localhost
+#
+# K8s 1.19+ 用 networking.k8s.io/v1；traefik 认默认 IngressClass。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway
+  labels:
+    app.kubernetes.io/name: gateway
+  annotations:
+    # SSE / WebSocket 长连接需要比较宽松的超时设置。
+    # 这里用 traefik 的 router 注解，保持 keep-alive 畅通。
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  rules:
+    - host: mesh.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway-business
+                port:
+                  name: http

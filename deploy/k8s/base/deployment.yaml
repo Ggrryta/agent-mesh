@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: 2
+  # 零不可用滚动升级：任何时候至少有 N 个副本在服务。
+  # maxSurge=1 允许新版本先起来再替换老版本。
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gateway
+        app.kubernetes.io/component: gateway
+      annotations:
+        # Prometheus 通过 annotation scrape；业务端口保持干净。
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      # 宽限期必须 >= STARTUP_READY_DELAY + preStop sleep + in-flight 清零时间。
+      # 保守设置；超过就 SIGKILL。
+      terminationGracePeriodSeconds: 90
+      containers:
+        - name: gateway
+          image: agent-mesh-gateway  # tag 由 kustomization images: 设置
+          imagePullPolicy: Always
+          ports:
+            - name: business
+              containerPort: 8080
+            - name: admin
+              containerPort: 9090
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          envFrom:
+            - configMapRef:
+                name: gateway-config
+            - secretRef:
+                name: gateway-secrets
+          # Startup：给 Pod 最多 60s（30 次 * 2s）时间进入就绪状态。
+          # 随后才开始 liveness 探测；readiness 频率更高。
+          startupProbe:
+            httpGet: {path: /startupz, port: business}
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /healthz, port: business}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /readyz, port: business}
+            periodSeconds: 3
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              exec:
+                # sleep 让 kubelet 先把 endpoint 移除传播出去，
+                # 然后进程才会收到 SIGTERM。配合 STARTUP_READY_DELAY 共同
+                # 构成我们的关机时序。
+                command: ["/bin/sleep", "5"]
+          resources:
+            # dev 调过的数值；Week 7 根据真正的 benchmark 再定。
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      # 尽量把副本散到不同可用区 / 节点。
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: gateway

@@ -1,0 +1,42 @@
+# 由 tag push 触发。产出 linux/amd64 + linux/arm64 的多架构镜像。
+#
+# 需要的 Secret：
+#   REGISTRY_USER, REGISTRY_PASSWORD （推送凭证）
+#   REGISTRY （例如 ghcr.io/your-org 或 docker.io/your-org）
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login
+        if: secrets.REGISTRY_USER != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: gateway
+          platforms: linux/amd64,linux/arm64
+          push: ${{ secrets.REGISTRY_USER != '' }}
+          tags: |
+            ${{ secrets.REGISTRY }}/agent-mesh-gateway:${{ github.ref_name }}
+            ${{ secrets.REGISTRY }}/agent-mesh-gateway:latest

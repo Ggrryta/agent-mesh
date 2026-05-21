@@ -1,0 +1,38 @@
+# Go 产物
+bin/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+gateway/identity-svc
+gateway/messaging-svc
+gateway/push-gateway
+gateway/gateway
+
+# 编辑器 / 操作系统
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# 本地配置
+.env
+.env.*
+!.env.example
+
+# 运行时
+/tmp/
+/pkg/
+workspace/
+
+# Docker / K8s
+kubeconfig*
+
+# meshd
+meshd/node_modules/
+meshd/dist/
+meshd/web/node_modules/
+meshd/web/dist/
+meshd/package-lock.json
+blog/public/

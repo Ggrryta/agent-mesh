@@ -1,0 +1,22 @@
+# Docker build 上下文不需要的东西。保持镜像精简、避免泄漏本地工件。
+.git
+.gitignore
+.vscode
+.idea
+*.md
+Dockerfile
+bin/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+
+# 测试 / 临时产物
+*_test.go
+testdata/
+coverage.out
+
+# K8s 清单本来就在上下文之外，显式写一遍更明确。
+deploy/
+k8s/

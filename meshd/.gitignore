@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+# web build 产物
+web/dist/
+web/node_modules/

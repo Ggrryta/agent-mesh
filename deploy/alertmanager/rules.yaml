@@ -1,0 +1,111 @@
+# Prometheus 告警规则 for Agent-Mesh Gateway.
+# 部署方式（如果用 prometheus-operator）：
+#   kubectl apply -f deploy/alertmanager/rules.yaml
+# 否则把 groups 段拷贝到 prometheus.yml 的 rule_files 里。
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agent-mesh-rules
+  namespace: agent-mesh
+  labels:
+    app.kubernetes.io/name: agent-mesh
+spec:
+  groups:
+    - name: agent-mesh.gateway
+      interval: 30s
+      rules:
+        # ─── 业务可用性 ────────────────────────────────────
+        - alert: GatewayHighErrorRate
+          expr: |
+            (sum(rate(mesh_http_requests_total{status=~"5.."}[5m]))
+             / sum(rate(mesh_http_requests_total[5m]))) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Gateway 5xx 错误率 > 5%"
+            description: "过去 5 分钟内 5xx 占比 {{ $value | humanizePercentage }}"
+            runbook: "https://wiki.example.com/runbooks/gateway-5xx"
+
+        - alert: GatewayHighLatency
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(mesh_http_request_duration_seconds_bucket[5m])) by (le)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Gateway P99 延迟 > 2s"
+            description: "P99 = {{ $value }}s"
+
+        # ─── Task 业务 ────────────────────────────────────
+        - alert: TaskFailureRateHigh
+          expr: |
+            (sum(rate(mesh_task_transitions_total{to_state="failed"}[10m]))
+             / sum(rate(mesh_task_created_total[10m]))) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Task 失败率 > 10%"
+            description: "{{ $value | humanizePercentage }} of tasks failed in last 10m"
+
+        # ─── 投递层 ────────────────────────────────────────
+        - alert: PushDeliveryFailing
+          expr: |
+            (sum(rate(mesh_inbox_push_fail_total[5m]))
+             / (sum(rate(mesh_inbox_push_success_total[5m])) +
+                sum(rate(mesh_inbox_push_fail_total[5m])))) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Push 失败率 > 50%"
+            description: "agent push 大面积失败，agent 改走 inbox pull 兜底，但延迟会涨"
+
+        # ─── 治理 ────────────────────────────────────────
+        - alert: CircuitBreakerOpen
+          expr: max(mesh_breaker_state) > 1.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "至少一个 agent 的熔断器打开"
+            description: "agent {{ $labels.agent_id }} 的下游连续失败"
+
+        - alert: RateLimitSpike
+          expr: |
+            sum(rate(mesh_ratelimit_reject_total[5m])) > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "限流拒绝量飙升 (> 10/s)"
+            description: "可能有 agent 异常或外部攻击"
+
+        # ─── 在线 / 心跳 ──────────────────────────────────
+        - alert: OnlineAgentsDropped
+          expr: |
+            (mesh_agent_cache_size /
+             (mesh_agent_cache_size offset 5m + 1)) < 0.7
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "在线 agent 数量 5 分钟内骤降 > 30%"
+            description: "可能是大规模断连或 Gateway 故障"
+
+        # ─── 资源 ─────────────────────────────────────────
+        - alert: PodOOMKilled
+          expr: |
+            increase(kube_pod_container_status_last_terminated_reason{
+              reason="OOMKilled",
+              pod=~".*gateway.*"
+            }[15m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: "Gateway Pod 被 OOMKilled"
+            description: "Pod {{ $labels.pod }} 被 OOM"

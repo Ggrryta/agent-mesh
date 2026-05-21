@@ -1,0 +1,38 @@
+# 两个 ClusterIP Service：
+#   - gateway-business :8080，由 Ingress 暴露
+#   - gateway-admin    :9090，仅集群内部可达（metrics / pprof）
+#
+# 分两个 service 是为了 metrics 永远不会意外暴露到公网。
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-business
+  labels:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/component: gateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: business
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-admin
+  labels:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/component: gateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: gateway
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: admin
+      protocol: TCP

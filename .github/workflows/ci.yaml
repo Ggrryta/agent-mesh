@@ -1,0 +1,103 @@
+# Agent-Mesh gateway 的 CI 流水线。
+#
+# 每次 push / PR 都跑：
+#   - Go test + vet + gofmt
+#   - Docker build（验证多阶段 Dockerfile）
+#   - K8s 清单 lint（kubeconform）
+#
+# 生产镜像的发布走另一个 workflow，由 tag 触发。
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gateway/**"
+      - "deploy/**"
+      - ".github/workflows/ci.yaml"
+      - "Makefile"
+  pull_request:
+    paths:
+      - "gateway/**"
+      - "deploy/**"
+      - ".github/workflows/ci.yaml"
+      - "Makefile"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go test + lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: gateway/go.mod
+          cache: true
+
+      - name: go mod verify
+        run: go mod verify
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: gofmt
+        run: |
+          diff=$(gofmt -l .)
+          if [ -n "$diff" ]; then
+            echo "gofmt would change the following files:"
+            echo "$diff"
+            exit 1
+          fi
+
+      - name: go test (race)
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: gateway/coverage.out
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: gateway
+          push: false
+          tags: agent-mesh-gateway:ci
+          # CI 之间复用层缓存；磁盘紧张时可以去掉。
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  manifests:
+    name: k8s manifests lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSfL -o /tmp/kubeconform.tgz \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar -xzf /tmp/kubeconform.tgz -C /tmp
+          sudo mv /tmp/kubeconform /usr/local/bin/
+
+      - name: Render kustomize + validate
+        run: |
+          kubectl kustomize deploy/k8s/base \
+            | kubeconform -summary -strict -kubernetes-version 1.30.0

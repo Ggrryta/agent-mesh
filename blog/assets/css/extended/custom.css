@@ -1,0 +1,53 @@
+/* 优化正文阅读体验 */
+.post-content {
+  line-height: 1.8;
+}
+
+/* 代码块优化 */
+.post-content pre {
+  border-radius: 8px;
+  margin: 1.5em 0;
+}
+
+/* 表格优化 */
+.post-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+}
+
+.post-content table th,
+.post-content table td {
+  padding: 0.75em 1em;
+  border: 1px solid var(--border);
+}
+
+.post-content table th {
+  background: var(--code-bg);
+  font-weight: 600;
+}
+
+/* 引用块优化 */
+.post-content blockquote {
+  border-left: 4px solid var(--primary);
+  padding: 0.5em 1em;
+  margin: 1.5em 0;
+  background: var(--code-bg);
+  border-radius: 0 8px 8px 0;
+}
+
+/* 首页分类链接样式 */
+.entry-content a {
+  text-decoration: none;
+  color: var(--primary);
+}
+
+.entry-content a:hover {
+  text-decoration: underline;
+}
+
+/* 目录优化 */
+.toc {
+  border-radius: 8px;
+  padding: 1em;
+}

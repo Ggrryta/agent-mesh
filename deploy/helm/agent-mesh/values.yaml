@@ -1,0 +1,108 @@
+# Agent-Mesh Helm chart 默认值（4 服务架构）。
+# 生产环境通过 -f values.production.yaml 覆盖。
+
+# ── API Gateway ──
+apiGateway:
+  replicaCount: 2
+  image:
+    repository: agent-mesh-api-gateway
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+# ── Identity Service ──
+identity:
+  replicaCount: 2
+  image:
+    repository: agent-mesh-identity
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: 1000m, memory: 512Mi }
+  grpcPort: 50051
+
+# ── Messaging Service ──
+messaging:
+  replicaCount: 2
+  image:
+    repository: agent-mesh-messaging
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: 1000m, memory: 512Mi }
+
+# ── Push Gateway ──
+push:
+  replicaCount: 2
+  image:
+    repository: agent-mesh-push
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+# ── 通用配置 ──
+service:
+  business:
+    port: 8080
+  admin:
+    port: 9090
+
+probes:
+  liveness:
+    path: /healthz
+    periodSeconds: 10
+    failureThreshold: 3
+  readiness:
+    path: /readyz
+    periodSeconds: 5
+    failureThreshold: 3
+
+terminationGracePeriodSeconds: 90
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: true
+  className: nginx
+  host: mesh.local
+  tls:
+    enabled: false
+
+config:
+  logLevel: info
+  logFormat: json
+  jwtTTL: 24h
+  jwtAgentTTL: 1h
+
+secret:
+  mysqlDSN: "mesh:dev_mesh_pw@tcp(mysql:3306)/agent_mesh?parseTime=true"
+  redisAddr: "redis:6379"
+  redisPassword: ""
+  jwtSecret: "REPLACE_ME_WITH_REAL_SECRET_32B__"
+  kafkaBrokers: "kafka:9092"
+
+namespace:
+  create: true
+  name: agent-mesh
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]

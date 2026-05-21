@@ -1,0 +1,36 @@
+# 生产环境覆盖 values.
+# 用法：helm upgrade --install agent-mesh ./deploy/helm/agent-mesh \
+#         -f deploy/helm/agent-mesh/values.production.yaml \
+#         --set secret.jwtSecret=xxx \
+#         --set secret.mysqlDSN=yyy
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: true
+  className: nginx
+  host: mesh.example.com
+  tls:
+    enabled: true
+
+config:
+  logLevel: info
+  logFormat: json
+
+# secret 必须通过 --set 或 ExternalSecrets 注入；这里仅占位
+secret:
+  jwtSecret: "REPLACE_VIA_EXTERNAL_SECRETS"

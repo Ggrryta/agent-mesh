@@ -1,0 +1,185 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "type": "row",
+      "title": "HTTP Traffic",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Rate (req/s)",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "targets": [
+        {
+          "expr": "sum(rate(mesh_http_requests_total[1m])) by (path, status)",
+          "legendFormat": "{{path}} [{{status}}]"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Latency (P50 / P95 / P99)",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(mesh_http_request_duration_seconds_bucket[5m])) by (le, path))",
+          "legendFormat": "{{path}} P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(mesh_http_request_duration_seconds_bucket[5m])) by (le, path))",
+          "legendFormat": "{{path}} P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(mesh_http_request_duration_seconds_bucket[5m])) by (le, path))",
+          "legendFormat": "{{path}} P99"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Task Activity",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }
+    },
+    {
+      "type": "stat",
+      "title": "Tasks Created (rate)",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 10 },
+      "targets": [{ "expr": "rate(mesh_task_created_total[1m])" }]
+    },
+    {
+      "type": "stat",
+      "title": "Messages (rate)",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 10 },
+      "targets": [{ "expr": "rate(mesh_task_messages_total[1m])" }]
+    },
+    {
+      "type": "stat",
+      "title": "Artifacts (rate)",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 10 },
+      "targets": [{ "expr": "rate(mesh_task_artifacts_total[1m])" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Task Transitions by State",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 10 },
+      "targets": [
+        {
+          "expr": "sum(rate(mesh_task_transitions_total[1m])) by (to_state)",
+          "legendFormat": "→ {{to_state}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Inbox & Push Delivery",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Inbox Pull Rate",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "targets": [{ "expr": "rate(mesh_inbox_pull_total[1m])", "legendFormat": "pulls/s" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Push Success vs Fail",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "targets": [
+        { "expr": "rate(mesh_inbox_push_success_total[1m])", "legendFormat": "success" },
+        { "expr": "rate(mesh_inbox_push_fail_total[1m])", "legendFormat": "fail" }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Feed (Frontend WebSocket)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 }
+    },
+    {
+      "type": "stat",
+      "title": "Active Subscribers",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 26 },
+      "targets": [{ "expr": "mesh_feed_active_subscribers" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Feed Publish Rate",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 26 },
+      "targets": [{ "expr": "rate(mesh_feed_publish_total[1m])" }]
+    },
+    {
+      "type": "row",
+      "title": "Governance",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Rate Limit Rejects",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "targets": [
+        {
+          "expr": "sum(rate(mesh_ratelimit_reject_total[1m])) by (agent_id)",
+          "legendFormat": "{{agent_id}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Circuit Breaker State (0=closed, 1=half, 2=open)",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "targets": [
+        {
+          "expr": "mesh_breaker_state",
+          "legendFormat": "{{agent_id}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Resource",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 }
+    },
+    {
+      "type": "stat",
+      "title": "Online Agents",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 42 },
+      "targets": [{ "expr": "mesh_agent_cache_size" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Heartbeat Rate",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 42 },
+      "targets": [{ "expr": "rate(mesh_agent_heartbeat_total[1m])" }]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["agent-mesh"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "Agent-Mesh Gateway",
+  "uid": "agent-mesh-gateway",
+  "version": 1
+}

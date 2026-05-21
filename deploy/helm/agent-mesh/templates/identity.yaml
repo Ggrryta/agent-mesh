@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-identity
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "agent-mesh.labels" . | nindent 4 }}
+    app.kubernetes.io/component: identity
+spec:
+  replicas: {{ .Values.identity.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: identity
+      {{- include "agent-mesh.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: identity
+        {{- include "agent-mesh.selectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: identity
+          image: "{{ .Values.identity.image.repository }}:{{ .Values.identity.image.tag }}"
+          imagePullPolicy: {{ .Values.identity.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: {{ .Values.identity.grpcPort }}
+          env:
+            - name: GATEWAY_BUSINESS_ADDR
+              value: ":8080"
+            - name: GRPC_ADDR
+              value: ":{{ .Values.identity.grpcPort }}"
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel }}
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-secret
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources: {{- toYaml .Values.identity.resources | nindent 12 }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-identity
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "agent-mesh.labels" . | nindent 4 }}
+    app.kubernetes.io/component: identity
+spec:
+  selector:
+    app.kubernetes.io/component: identity
+    {{- include "agent-mesh.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: grpc
+      port: {{ .Values.identity.grpcPort }}
+      targetPort: grpc

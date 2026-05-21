@@ -1,0 +1,20 @@
+# k3d / k3s 的 registry mirror 配置，让集群在国内网络也能拉到镜像。
+mirrors:
+  "docker.io":
+    endpoint:
+      - https://dockerproxy.com
+      - https://docker.m.daocloud.io
+      - https://mirror.ccs.tencentyun.com
+  "registry-1.docker.io":
+    endpoint:
+      - https://dockerproxy.com
+      - https://docker.m.daocloud.io
+  "k8s.gcr.io":
+    endpoint:
+      - https://registry.cn-hangzhou.aliyuncs.com/google_containers
+  "registry.k8s.io":
+    endpoint:
+      - https://registry.cn-hangzhou.aliyuncs.com/google_containers
+  "gcr.io":
+    endpoint:
+      - https://gcr.m.daocloud.io

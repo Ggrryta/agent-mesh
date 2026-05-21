@@ -1,0 +1,157 @@
+baseURL: "https://ggrryta.github.io/trpc-a2a-go/"
+title: "Agent-Mesh Blog"
+theme: "PaperMod"
+paginate: 10
+
+defaultContentLanguage: zh
+defaultContentLanguageInSubdir: true
+
+# 新增：启用 robots.txt 和 sitemap
+enableRobotsTXT: true
+buildDrafts: false
+buildFuture: false
+buildExpired: false
+
+# 新增：minify 输出
+minify:
+  disableXML: true
+  minifyOutput: true
+
+languages:
+  zh:
+    label: "中文"
+    weight: 1
+    contentDir: content/zh
+    title: "Agent-Mesh 技术博客"
+    params:
+      description: "Agent-Mesh 项目技术博客 — 架构设计、开发日志、技术分享"
+    menu:
+      main:
+        - name: "首页"
+          url: ""
+          weight: 1
+        - name: "路线图"
+          url: "roadmap/"
+          weight: 2
+        - name: "文章"
+          url: "posts/"
+          weight: 3
+        - name: "分类"
+          url: "categories/"
+          weight: 4
+        - name: "标签"
+          url: "tags/"
+          weight: 5
+        - name: "搜索"
+          url: "search/"
+          weight: 6
+        - name: "归档"
+          url: "archives/"
+          weight: 7
+        - name: "关于"
+          url: "about/"
+          weight: 8
+
+  en:
+    label: "English"
+    weight: 2
+    contentDir: content/en
+    title: "Agent-Mesh Tech Blog"
+    params:
+      description: "Agent-Mesh project tech blog — architecture, dev logs, and tech sharing"
+    menu:
+      main:
+        - name: "Home"
+          url: ""
+          weight: 1
+        - name: "Posts"
+          url: "posts/"
+          weight: 2
+        - name: "Categories"
+          url: "categories/"
+          weight: 3
+        - name: "Tags"
+          url: "tags/"
+          weight: 4
+        - name: "Search"
+          url: "search/"
+          weight: 5
+        - name: "About"
+          url: "about/"
+          weight: 6
+
+taxonomies:
+  category: categories
+  tag: tags
+  series: series
+
+params:
+  env: production
+  defaultTheme: auto
+  ShowReadingTime: true
+  ShowShareButtons: true
+  ShowPostNavLinks: true
+  ShowBreadCrumbs: true
+  ShowCodeCopyButtons: true
+  ShowToc: true
+  TocOpen: false
+  ShowWordCount: true
+  ShowLastMod: true
+  ShowFullTextinRSS: true
+  comments: false
+
+  # 封面图配置
+  cover:
+    linkFullImages: true
+    responsiveImages: true
+
+  homeInfoParams:
+    Title: "🤖 Agent-Mesh Tech Blog"
+    Content: >
+      面向 Agent 的对等通信网络技术博客。
+
+      分享架构设计、开发日志和技术心得。
+
+      - 🏗️ [架构设计](/zh/categories/架构设计/) — 核心设计决策与技术选型
+
+      - 💡 [方案探讨](/zh/categories/方案探讨/) — 深度技术讨论与思考
+
+      - 📢 [项目介绍](/zh/categories/项目介绍/) — 项目概览与愿景
+
+  socialIcons:
+    - name: github
+      url: "https://github.com/Ggrryta/trpc-a2a-go"
+    - name: rss
+      url: "index.xml"
+
+  assets:
+    favicon: "/favicon.ico"
+
+  # SEO 优化
+  label:
+    text: "Agent-Mesh"
+    icon: "/favicon.ico"
+    iconHeight: 35
+
+  # 文章编辑链接
+  editPost:
+    URL: "https://github.com/Ggrryta/trpc-a2a-go/tree/main/agent-mesh/blog/content"
+    Text: "Suggest Changes"
+    appendFilePath: true
+
+outputs:
+  home:
+    - HTML
+    - RSS
+    - JSON
+
+markup:
+  highlight:
+    style: monokai
+    lineNos: true
+    codeFences: true
+    guessSyntax: true
+    anchorLineNos: true
+  goldmark:
+    renderer:
+      unsafe: true

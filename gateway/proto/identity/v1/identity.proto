@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package identity.v1;
+
+option go_package = "agent-mesh/gateway/internal/grpc/identitypb";
+
+// IdentityService 暴露身份域的核心查询能力，供 Messaging Service 跨服务调用。
+// 设计原则：只暴露 Messaging 需要的最小接口，不暴露写操作。
+service IdentityService {
+  // CanCommunicate 判断两个 agent 是否可以通信（好友 OR 同群）。
+  // Messaging Svc 在 SubmitTask 时调用。
+  rpc CanCommunicate(CanCommunicateRequest) returns (CanCommunicateResponse);
+
+  // LookupAgentOwner 查询 agent 的 owner_uid 和 kind。
+  // Messaging Svc 在鉴权时调用（判断 caller 是否有权操作某个 task）。
+  rpc LookupAgentOwner(LookupAgentOwnerRequest) returns (LookupAgentOwnerResponse);
+
+  // GetAgent 获取 agent 基本信息。
+  rpc GetAgent(GetAgentRequest) returns (AgentInfo);
+}
+
+message CanCommunicateRequest {
+  string agent_a = 1;
+  string agent_b = 2;
+}
+
+message CanCommunicateResponse {
+  bool allowed = 1;
+}
+
+message LookupAgentOwnerRequest {
+  string agent_id = 1;
+}
+
+message LookupAgentOwnerResponse {
+  int64 owner_uid = 1;
+  string kind = 2;
+  bool found = 3;
+}
+
+message GetAgentRequest {
+  string agent_id = 1;
+}
+
+message AgentInfo {
+  string agent_id = 1;
+  string name = 2;
+  string status = 3;
+  int64 owner_uid = 4;
+  string kind = 5;
+}

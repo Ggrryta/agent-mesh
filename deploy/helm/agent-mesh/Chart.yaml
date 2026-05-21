@@ -1,0 +1,13 @@
+apiVersion: v2
+name: agent-mesh
+description: Agent-Mesh — 多 Agent 协作操作系统（4 服务架构）
+type: application
+version: 2.0.0
+appVersion: "2.0.0"
+keywords:
+  - agent-mesh
+  - multi-agent
+  - collaboration
+  - a2a
+maintainers:
+  - name: agent-mesh team

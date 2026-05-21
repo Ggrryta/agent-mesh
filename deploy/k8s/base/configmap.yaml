@@ -1,0 +1,23 @@
+# 非敏感配置。按环境通过 kustomize overlay 覆盖。
+# 敏感项放 gateway-secrets（见 secret.yaml）。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+data:
+  GATEWAY_BUSINESS_ADDR: ":8080"
+  GATEWAY_ADMIN_ADDR: ":9090"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  SHUTDOWN_TIMEOUT: "60s"
+  # 关闭 listener 前留点时间，让 Service endpoint 的移除传播完。
+  # K8s 侧 lifecycle.preStop 也会 sleep；两边都留一点，保守一点。
+  STARTUP_READY_DELAY: "5s"
+  MYSQL_MAX_OPEN_CONNS: "50"
+  MYSQL_MAX_IDLE_CONNS: "10"
+  MYSQL_CONN_MAX_LIFETIME: "30m"
+  REDIS_DB: "0"
+  # JWT TTL：user token 随 admin 登录长期有效；agent token 由 API Key 换取，
+  # 短 TTL 换"吊销生效时间" — 吊销 key 后，已签发 JWT 最多再活 JWT_AGENT_TTL。
+  JWT_TTL: "24h"
+  JWT_AGENT_TTL: "1h"
