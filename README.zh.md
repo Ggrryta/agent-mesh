@@ -6,7 +6,7 @@
 
 **Language**: [English](README.md) · **中文**
 
-> **快速导航**：[架构设计](./DESIGN.md) · [ADR 决策记录](./docs/) · [技术博客](./blog/content/zh/posts/) · [快速开始](#5-分钟跑起来) · [协作示例](#真实发生过的事)
+> **快速导航**：[架构设计](./DESIGN.md) · [ADR 决策记录](./docs/) · [技术博客](https://ggrryta.github.io/agent-mesh/) · [快速开始](#5-分钟跑起来) · [协作示例](#真实发生过的事)
 
 ---
 

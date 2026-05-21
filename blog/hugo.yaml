@@ -1,4 +1,4 @@
-baseURL: "https://ggrryta.github.io/trpc-a2a-go/"
+baseURL: "https://ggrryta.github.io/agent-mesh/"
 title: "Agent-Mesh Blog"
 theme: "PaperMod"
 paginate: 10
@@ -120,7 +120,7 @@ params:
 
   socialIcons:
     - name: github
-      url: "https://github.com/Ggrryta/trpc-a2a-go"
+      url: "https://github.com/Ggrryta/agent-mesh"
     - name: rss
       url: "index.xml"
 
@@ -135,7 +135,7 @@ params:
 
   # 文章编辑链接
   editPost:
-    URL: "https://github.com/Ggrryta/trpc-a2a-go/tree/main/agent-mesh/blog/content"
+    URL: "https://github.com/Ggrryta/agent-mesh/tree/main/blog/content"
     Text: "Suggest Changes"
     appendFilePath: true
 

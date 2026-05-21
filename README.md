@@ -6,7 +6,7 @@
 
 **Language**: **English** · [中文](README.zh.md)
 
-> **Navigate**: [Architecture](./DESIGN.md) · [ADRs](./docs/) · [Blog](./blog/content/zh/posts/) · [Quick Start](#quick-start) · [Examples](#what-actually-happens)
+> **Navigate**: [Architecture](./DESIGN.md) · [ADRs](./docs/) · [Blog](https://ggrryta.github.io/agent-mesh/) · [Quick Start](#quick-start) · [Examples](#what-actually-happens)
 
 ---
 
