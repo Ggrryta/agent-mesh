@@ -39,13 +39,9 @@ jobs:
           hugo-version: "latest"
           extended: true
 
-      - name: Debug theme
-        working-directory: blog
-        run: ls -la themes/PaperMod/layouts/
-
       - name: Build
         working-directory: blog
-        run: hugo version && hugo --minify
+        run: hugo --minify
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
