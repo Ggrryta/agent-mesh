@@ -113,11 +113,11 @@ params:
 
       分享架构设计、开发日志和技术心得。
 
-      - 🏗️ [架构设计](/zh/categories/架构设计/) — 核心设计决策与技术选型
+      - 🏗️ [架构设计](/agent-mesh/zh/categories/架构设计/) — 核心设计决策与技术选型
 
-      - 💡 [方案探讨](/zh/categories/方案探讨/) — 深度技术讨论与思考
+      - 💡 [方案探讨](/agent-mesh/zh/categories/方案探讨/) — 深度技术讨论与思考
 
-      - 📢 [项目介绍](/zh/categories/项目介绍/) — 项目概览与愿景
+      - 📢 [项目介绍](/agent-mesh/zh/categories/项目介绍/) — 项目概览与愿景
 
   socialIcons:
     - name: github
