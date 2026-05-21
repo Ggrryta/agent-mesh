@@ -31,7 +31,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           fetch-depth: 0
 
       - name: Setup Hugo
@@ -42,7 +41,7 @@ jobs:
 
       - name: Build
         working-directory: blog
-        run: hugo --minify
+        run: hugo --minify --baseURL "https://ggrryta.github.io/agent-mesh/"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
